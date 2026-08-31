@@ -153,10 +153,20 @@ teacherRouter.post('/homework/:id/publish', async (req, res) => {
   res.json({ ok: true });
 });
 
+const TEACHER_HOMEWORK_PAGE_SIZE = 20;
+
 teacherRouter.get('/homework', async (req, res) => {
   const tId = await teacherId(req);
-  const rows = await portalDb()('hp_homework').where({ teacher_id: tId }).orderBy('assigned_date', 'desc');
-  res.json(rows);
+  const page = Math.max(1, Number(req.query.page) || 1);
+  const [{ count }] = (await portalDb()('hp_homework').where({ teacher_id: tId }).count<{ count: string }[]>('id as count')) as [
+    { count: string },
+  ];
+  const rows = await portalDb()('hp_homework')
+    .where({ teacher_id: tId })
+    .orderBy('assigned_date', 'desc')
+    .limit(TEACHER_HOMEWORK_PAGE_SIZE)
+    .offset((page - 1) * TEACHER_HOMEWORK_PAGE_SIZE);
+  res.json({ rows, total: Number(count), page, pageSize: TEACHER_HOMEWORK_PAGE_SIZE });
 });
 
 teacherRouter.get('/homework/:id', async (req, res) => {

@@ -28,33 +28,61 @@ studentRouter.get('/homework', async (req, res) => {
   const student = await loadCallerStudent(req);
   const status = String(req.query.status ?? 'all');
   const page = Math.max(1, Number(req.query.page ?? 1));
+  const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+  const subjectId = req.query.subjectId ? Number(req.query.subjectId) : null;
 
-  const query = portalDb()('hp_homework as h')
-    .join('hp_homework_targets as tg', 'tg.homework_id', 'h.id')
-    .join('hp_teachers as t', 't.id', 'h.teacher_id')
-    .leftJoin('hp_subjects as s', 's.id', 'h.subject_id')
-    .leftJoin('hp_homework_submissions as sub', function () {
-      this.on('sub.homework_id', '=', 'h.id').andOn('sub.student_id', '=', portalDb().raw('?', [student.id]));
-    })
+  function baseQuery() {
+    const query = portalDb()('hp_homework as h')
+      .join('hp_homework_targets as tg', 'tg.homework_id', 'h.id')
+      .join('hp_teachers as t', 't.id', 'h.teacher_id')
+      .leftJoin('hp_subjects as s', 's.id', 'h.subject_id')
+      .leftJoin('hp_homework_submissions as sub', function () {
+        this.on('sub.homework_id', '=', 'h.id').andOn('sub.student_id', '=', portalDb().raw('?', [student.id]));
+      })
+      .where('h.status', 'published')
+      .andWhere('tg.class_id', student.class_id)
+      .andWhere(function () {
+        this.whereNull('tg.section_id').orWhere('tg.section_id', student.section_id);
+      });
+    if (status === 'pending') {
+      query.andWhere((qb) => qb.whereNull('sub.status').orWhere('sub.status', 'pending'));
+    }
+    if (q) query.andWhereILike('h.title', `%${q}%`);
+    if (subjectId) query.andWhere('h.subject_id', subjectId);
+    return query;
+  }
+
+  const rows = await baseQuery()
+    .clone()
     .select(
       'h.id', 'h.title', 'h.description', 'h.assigned_date', 'h.due_date',
       's.name as subject', 't.full_name as teacher',
       portalDb().raw("coalesce(sub.status, 'pending') as submission_status")
     )
+    .distinct()
+    .orderBy('h.assigned_date', 'desc')
+    .limit(PAGE_SIZE)
+    .offset((page - 1) * PAGE_SIZE);
+
+  const countRow = (await baseQuery().clone().countDistinct<{ count: string }[]>('h.id as count'))[0] as { count: string };
+
+  res.json({ rows, total: Number(countRow.count), page, pageSize: PAGE_SIZE });
+});
+
+/** Subjects that actually appear in this student's own published homework — used to populate the feed's subject filter. */
+studentRouter.get('/subjects', async (req, res) => {
+  const student = await loadCallerStudent(req);
+  const rows = await portalDb()('hp_homework as h')
+    .join('hp_homework_targets as tg', 'tg.homework_id', 'h.id')
+    .join('hp_subjects as s', 's.id', 'h.subject_id')
     .where('h.status', 'published')
     .andWhere('tg.class_id', student.class_id)
     .andWhere(function () {
       this.whereNull('tg.section_id').orWhere('tg.section_id', student.section_id);
     })
-    .orderBy('h.assigned_date', 'desc')
-    .limit(PAGE_SIZE)
-    .offset((page - 1) * PAGE_SIZE);
-
-  if (status === 'pending') {
-    query.andWhere((qb) => qb.whereNull('sub.status').orWhere('sub.status', 'pending'));
-  }
-
-  res.json(await query);
+    .distinct('s.id', 's.name')
+    .orderBy('s.name');
+  res.json(rows);
 });
 
 studentRouter.get('/homework/:id', async (req, res) => {

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { api } from '../../api/client';
@@ -14,6 +14,11 @@ interface HomeworkItem {
   assigned_date: string;
   due_date: string | null;
   submission_status: 'pending' | 'submitted' | 'late' | 'graded';
+}
+
+interface SubjectOption {
+  id: number;
+  name: string;
 }
 
 const STATUS_LABEL: Record<HomeworkItem['submission_status'], string> = {
@@ -38,39 +43,44 @@ function formatDateHeading(dateStr: string): string {
 export function HomeworkFeedPage() {
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending'>('pending');
   const [search, setSearch] = useState('');
-  const [subjectFilter, setSubjectFilter] = useState('All');
+  const [subjectFilter, setSubjectFilter] = useState(''); // '' = All
+  const [page, setPage] = useState(1);
+
+  // Debounce free-text search so every keystroke doesn't refetch.
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  useEffect(() => setPage(1), [statusFilter, subjectFilter, debouncedSearch]);
+
+  const { data: subjects } = useQuery({
+    queryKey: ['student-subjects'],
+    queryFn: async () => (await api.get<SubjectOption[]>('/student/subjects')).data,
+  });
 
   const { data, isLoading } = useQuery({
-    queryKey: ['student-homework', statusFilter],
+    queryKey: ['student-homework', statusFilter, subjectFilter, debouncedSearch, page],
     queryFn: async () => {
-      const res = await api.get<HomeworkItem[]>('/student/homework', { params: { status: statusFilter } });
+      const res = await api.get<{ rows: HomeworkItem[]; total: number; pageSize: number }>('/student/homework', {
+        params: { status: statusFilter, subjectId: subjectFilter || undefined, q: debouncedSearch || undefined, page },
+      });
       return res.data;
     },
   });
 
-  const subjects = useMemo(() => {
-    const set = new Set<string>();
-    (data ?? []).forEach((hw) => hw.subject && set.add(hw.subject));
-    return ['All', ...Array.from(set)];
-  }, [data]);
-
-  const filtered = useMemo(() => {
-    return (data ?? []).filter((hw) => {
-      if (subjectFilter !== 'All' && hw.subject !== subjectFilter) return false;
-      if (search && !hw.title.toLowerCase().includes(search.toLowerCase())) return false;
-      return true;
-    });
-  }, [data, subjectFilter, search]);
-
   const grouped = useMemo(() => {
     const map = new Map<string, HomeworkItem[]>();
-    for (const hw of filtered) {
+    for (const hw of data?.rows ?? []) {
       const key = hw.assigned_date;
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(hw);
     }
     return Array.from(map.entries()).sort((a, b) => (a[0] < b[0] ? 1 : -1));
-  }, [filtered]);
+  }, [data]);
+
+  const totalPages = data ? Math.max(1, Math.ceil(data.total / data.pageSize)) : 1;
 
   return (
     <div className="min-h-screen pb-24 sm:pb-10">
@@ -118,9 +128,10 @@ export function HomeworkFeedPage() {
                 onChange={(e) => setSubjectFilter(e.target.value)}
                 className="font-semibold text-slate-800 bg-transparent focus:outline-none"
               >
-                {subjects.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
+                <option value="">All</option>
+                {(subjects ?? []).map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
                   </option>
                 ))}
               </select>
@@ -172,6 +183,20 @@ export function HomeworkFeedPage() {
             </div>
           </section>
         ))}
+
+        {!isLoading && data && data.total > data.pageSize && (
+          <div className="flex items-center justify-center gap-4 py-4 text-sm">
+            <button disabled={page <= 1} onClick={() => setPage((p) => p - 1)} className="px-2 py-1 disabled:opacity-30 font-medium">
+              ← Prev
+            </button>
+            <span className="text-slate-500">
+              Page {page} of {totalPages}
+            </span>
+            <button disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)} className="px-2 py-1 disabled:opacity-30 font-medium">
+              Next →
+            </button>
+          </div>
+        )}
       </main>
 
       <BottomNav />

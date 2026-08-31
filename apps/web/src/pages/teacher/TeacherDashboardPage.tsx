@@ -30,16 +30,19 @@ export function TeacherDashboardPage() {
   const [dueDate, setDueDate] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [createdHomeworkId, setCreatedHomeworkId] = useState<number | null>(null);
+  const [page, setPage] = useState(1);
 
   const { data: myClasses } = useQuery({
     queryKey: ['teacher-my-classes'],
     queryFn: async () => (await api.get<MyClass[]>('/teacher/my-classes')).data,
   });
 
-  const { data: homeworkList } = useQuery({
-    queryKey: ['teacher-homework'],
-    queryFn: async () => (await api.get<HomeworkRow[]>('/teacher/homework')).data,
+  const { data: homeworkData } = useQuery({
+    queryKey: ['teacher-homework', page],
+    queryFn: async () => (await api.get<{ rows: HomeworkRow[]; total: number; pageSize: number }>('/teacher/homework', { params: { page } })).data,
   });
+  const homeworkList = homeworkData?.rows;
+  const totalPages = homeworkData ? Math.max(1, Math.ceil(homeworkData.total / homeworkData.pageSize)) : 1;
 
   const createMutation = useMutation({
     mutationFn: async () => {
@@ -179,6 +182,19 @@ export function TeacherDashboardPage() {
             ))}
             {homeworkList?.length === 0 && <p className="text-sm text-slate-400">Nothing posted yet.</p>}
           </div>
+          {homeworkData && homeworkData.total > homeworkData.pageSize && (
+            <div className="flex items-center justify-center gap-3 mt-4 text-sm">
+              <button disabled={page <= 1} onClick={() => setPage((p) => p - 1)} className="px-2 py-1 disabled:opacity-30">
+                ← Prev
+              </button>
+              <span className="text-slate-500">
+                Page {page} of {totalPages}
+              </span>
+              <button disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)} className="px-2 py-1 disabled:opacity-30">
+                Next →
+              </button>
+            </div>
+          )}
         </section>
       </main>
     </div>
