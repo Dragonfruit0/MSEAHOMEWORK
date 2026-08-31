@@ -26,6 +26,30 @@ branchRouter.get('/teachers', async (req, res) => {
   res.json(await query.orderBy('full_name'));
 });
 
+branchRouter.get('/subjects', async (req, res) => {
+  const branchId = await callerBranchId(req);
+  const classId = req.query.classId ? Number(req.query.classId) : null;
+  const query = portalDb()('hp_subjects as sub')
+    .join('hp_classes as c', 'c.id', 'sub.class_id')
+    .select('sub.id', 'sub.name')
+    .where('sub.is_active', true);
+  if (classId) query.andWhere('sub.class_id', classId);
+  if (branchId) query.andWhere('c.branch_id', branchId);
+  res.json(await query.orderBy('sub.name'));
+});
+
+branchRouter.get('/sections', async (req, res) => {
+  const branchId = await callerBranchId(req);
+  const classId = req.query.classId ? Number(req.query.classId) : null;
+  const query = portalDb()('hp_sections as sec')
+    .join('hp_classes as c', 'c.id', 'sec.class_id')
+    .select('sec.id', 'sec.name')
+    .where('sec.is_active', true);
+  if (classId) query.andWhere('sec.class_id', classId);
+  if (branchId) query.andWhere('c.branch_id', branchId);
+  res.json(await query.orderBy('sec.name'));
+});
+
 branchRouter.get('/assignments', async (req, res) => {
   const branchId = await callerBranchId(req);
   const query = portalDb()('hp_teacher_assignments as ta')
