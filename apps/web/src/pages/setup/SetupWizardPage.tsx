@@ -39,6 +39,12 @@ interface TableInfo {
   name: string;
   approxRowCount?: number;
 }
+interface FkInfo {
+  fromTable: string;
+  fromColumn: string;
+  toTable: string;
+  toColumn: string;
+}
 interface EntityValidation {
   rowCount: number;
   nulls: Record<string, number>;
@@ -140,6 +146,18 @@ export function SetupWizardPage() {
       queryFn: async () => {
         const [schema, name] = table!.split('.');
         return (await api.get<ColumnInfo[]>(`/setup/connections/${sourceConnectionId}/columns`, { params: { schema, table: name } })).data;
+      },
+      enabled: sourceConnectionId != null && !!table,
+    });
+  }
+
+  function useForeignKeysFor(entity: LogicalEntityName) {
+    const table = entityTable[entity];
+    return useQuery({
+      queryKey: ['setup-fks', sourceConnectionId, table],
+      queryFn: async () => {
+        const [schema, name] = table!.split('.');
+        return (await api.get<FkInfo[]>(`/setup/connections/${sourceConnectionId}/foreign-keys`, { params: { schema, table: name } })).data;
       },
       enabled: sourceConnectionId != null && !!table,
     });
@@ -350,6 +368,8 @@ export function SetupWizardPage() {
                   fields={entityFields[entity] ?? {}}
                   onSetField={(field, col) => setField(entity, field, col)}
                   useColumns={() => useColumnsFor(entity)}
+                  useForeignKeys={() => useForeignKeysFor(entity)}
+                  entityTable={entityTable}
                   nameConcat={nameConcat[entity] ?? { enabled: false, lastNameColumn: '' }}
                   onChangeNameConcat={(v) => setNameConcat((prev) => ({ ...prev, [entity]: v }))}
                 />
@@ -471,6 +491,8 @@ export function SetupWizardPage() {
   );
 }
 
+const REFERENCEABLE_ENTITIES: LogicalEntityName[] = ['class', 'section', 'branch', 'subject'];
+
 function EntityMapper({
   entity,
   tables,
@@ -479,6 +501,8 @@ function EntityMapper({
   fields,
   onSetField,
   useColumns,
+  useForeignKeys,
+  entityTable,
   nameConcat,
   onChangeNameConcat,
 }: {
@@ -489,12 +513,37 @@ function EntityMapper({
   fields: Record<string, string>;
   onSetField: (field: string, col: string) => void;
   useColumns: () => { data?: ColumnInfo[] };
+  useForeignKeys: () => { data?: FkInfo[] };
+  entityTable: Partial<Record<LogicalEntityName, string>>;
   nameConcat: { enabled: boolean; lastNameColumn: string };
   onChangeNameConcat: (v: { enabled: boolean; lastNameColumn: string }) => void;
 }) {
   const { data: columns } = useColumns();
+  const { data: foreignKeys } = useForeignKeys();
   const required = REQUIRED_FIELDS[entity];
   const optional = OPTIONAL_FIELDS[entity];
+
+  // "Power BI-style" relationship detection: once this entity's table and
+  // another entity's table are both picked, look for a detected foreign key
+  // from this table to that one and fill in the matching "{entity}_ref"
+  // field — but only if the admin hasn't already set (or previously
+  // touched) that field themselves.
+  useEffect(() => {
+    if (!foreignKeys || foreignKeys.length === 0) return;
+    for (const refEntityName of REFERENCEABLE_ENTITIES) {
+      const refField = `${refEntityName}_ref`;
+      if (![...required, ...optional].includes(refField)) continue;
+      if (fields[refField]) continue;
+      const targetTable = entityTable[refEntityName];
+      if (!targetTable) continue;
+      const match = foreignKeys.find((fk) => fk.toTable.toLowerCase() === targetTable.toLowerCase());
+      if (match) onSetField(refField, match.fromColumn);
+    }
+    // Intentionally excludes `fields`/`onSetField` — this effect itself
+    // calls onSetField, so including fields would re-fire on every keystroke
+    // and fight a manual edit that clears a suggested value back out.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [foreignKeys, entityTable.class, entityTable.section, entityTable.branch, entityTable.subject]);
 
   return (
     <div className="border border-slate-100 rounded-xl p-4">
