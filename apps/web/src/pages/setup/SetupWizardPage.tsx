@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   OPTIONAL_FIELDS,
@@ -7,6 +7,7 @@ import {
 } from '@homework-portal/shared';
 import { api } from '../../api/client';
 import { Logo } from '../../components/Logo';
+import { useAuth } from '../../auth/AuthContext';
 
 /**
  * The "Power BI-style" setup wizard: connect to whatever SQL database the
@@ -47,7 +48,19 @@ interface EntityValidation {
 }
 
 export function SetupWizardPage() {
+  const { user, loading: authLoading } = useAuth();
   const [step, setStep] = useState(0);
+
+  // An admin re-opening this page to re-map after go-live is already
+  // authenticated — the bootstrap-admin step only makes sense for the very
+  // first run, before any account exists to log in with. `user` resolves
+  // asynchronously (silent refresh on load), so this can't just be the
+  // initial useState value.
+  useEffect(() => {
+    if (!authLoading && user?.role === 'SUPER_ADMIN') {
+      setStep((s) => (s === 0 ? 1 : s));
+    }
+  }, [authLoading, user]);
 
   // Step 0: bootstrap admin
   const [adminLoginId, setAdminLoginId] = useState('');

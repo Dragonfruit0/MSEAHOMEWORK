@@ -116,13 +116,18 @@ function SyncSection() {
             'No sync has run yet.'
           )}
         </div>
-        <button
-          onClick={() => syncMutation.mutate()}
-          disabled={syncMutation.isPending}
-          className="rounded-xl bg-brand-indigo text-white font-semibold px-4 py-2 text-sm disabled:opacity-50 shrink-0"
-        >
-          {syncMutation.isPending ? 'Syncing…' : 'Sync now'}
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          <a href="/setup" className="rounded-xl border border-slate-200 text-slate-600 font-semibold px-4 py-2 text-sm hover:bg-slate-50">
+            Re-map source data
+          </a>
+          <button
+            onClick={() => syncMutation.mutate()}
+            disabled={syncMutation.isPending}
+            className="rounded-xl bg-brand-indigo text-white font-semibold px-4 py-2 text-sm disabled:opacity-50"
+          >
+            {syncMutation.isPending ? 'Syncing…' : 'Sync now'}
+          </button>
+        </div>
       </div>
       {latest?.error_log && (
         <pre className="text-xs bg-rose-50 text-rose-700 rounded-xl p-3 overflow-auto mb-3">{latest.error_log}</pre>
