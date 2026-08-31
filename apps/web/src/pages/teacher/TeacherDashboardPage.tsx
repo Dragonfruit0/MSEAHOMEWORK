@@ -30,6 +30,7 @@ export function TeacherDashboardPage() {
   const [dueDate, setDueDate] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [createdHomeworkId, setCreatedHomeworkId] = useState<number | null>(null);
+  const [attachmentCount, setAttachmentCount] = useState(0);
   const [page, setPage] = useState(1);
 
   const { data: myClasses } = useQuery({
@@ -61,8 +62,12 @@ export function TeacherDashboardPage() {
     },
     onSuccess: async (id) => {
       setCreatedHomeworkId(id);
-      const file = fileInputRef.current?.files?.[0];
-      if (file) {
+      const files = Array.from(fileInputRef.current?.files ?? []).slice(0, 5);
+      // Uploaded sequentially, not in parallel: each call is its own request
+      // against the same homework row, and the backend has no batch
+      // endpoint — one request per file keeps this a straightforward loop
+      // rather than needing to reconcile partial-failure ordering.
+      for (const file of files) {
         const form = new FormData();
         form.append('file', file);
         await api.post(`/teacher/homework/${id}/attachments`, form, {
@@ -74,6 +79,7 @@ export function TeacherDashboardPage() {
       setDescription('');
       setDueDate('');
       setSelectedClasses(new Set());
+      setAttachmentCount(0);
       if (fileInputRef.current) fileInputRef.current.value = '';
       queryClient.invalidateQueries({ queryKey: ['teacher-homework'] });
     },
@@ -110,8 +116,15 @@ export function TeacherDashboardPage() {
               />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-500 mb-1">Attachment</label>
-              <input ref={fileInputRef} type="file" className="text-xs text-slate-500" />
+              <label className="block text-xs font-semibold text-slate-500 mb-1">Attachments (up to 5)</label>
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                onChange={(e) => setAttachmentCount(e.target.files?.length ?? 0)}
+                className="text-xs text-slate-500"
+              />
+              {attachmentCount > 5 && <p className="text-xs text-rose-500 mt-1">Select at most 5 files.</p>}
             </div>
 
             <div>
@@ -140,7 +153,7 @@ export function TeacherDashboardPage() {
             </div>
 
             <button
-              disabled={!title || selectedClasses.size === 0 || createMutation.isPending}
+              disabled={!title || selectedClasses.size === 0 || attachmentCount > 5 || createMutation.isPending}
               onClick={() => createMutation.mutate()}
               className="w-full rounded-xl bg-brand-indigo text-white font-semibold py-2.5 text-sm hover:bg-brand-indigo-dark transition-colors disabled:opacity-50"
             >
