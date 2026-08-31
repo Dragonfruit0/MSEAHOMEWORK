@@ -7,6 +7,7 @@ import { ChangePasswordPage } from './pages/auth/ChangePasswordPage';
 import { HomeworkDetailPage } from './pages/student/HomeworkDetailPage';
 import { RoleHome } from './pages/RoleHome';
 import { AdminDashboardPage } from './pages/admin/AdminDashboardPage';
+import { TeacherSubmissionsPage } from './pages/teacher/TeacherSubmissionsPage';
 import { SetupWizardPage } from './pages/setup/SetupWizardPage';
 
 const queryClient = new QueryClient();
@@ -43,6 +44,14 @@ export function App() {
               element={
                 <ProtectedRoute roles={['SUPER_ADMIN']}>
                   <AdminDashboardPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/teacher/homework/:id/submissions"
+              element={
+                <ProtectedRoute roles={['TEACHER']}>
+                  <TeacherSubmissionsPage />
                 </ProtectedRoute>
               }
             />

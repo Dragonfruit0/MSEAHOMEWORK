@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
 import { api } from '../../api/client';
 import { TopBar } from '../../components/TopBar';
 
@@ -160,13 +161,20 @@ export function TeacherDashboardPage() {
                     {hw.due_date && ` · Due ${new Date(hw.due_date).toLocaleDateString()}`}
                   </p>
                 </div>
-                <span
-                  className={`text-xs font-semibold px-2.5 py-1 rounded-full ${
-                    hw.status === 'published' ? 'bg-brand-green/10 text-brand-green-dark' : 'bg-slate-100 text-slate-500'
-                  }`}
-                >
-                  {hw.status}
-                </span>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span
+                    className={`text-xs font-semibold px-2.5 py-1 rounded-full ${
+                      hw.status === 'published' ? 'bg-brand-green/10 text-brand-green-dark' : 'bg-slate-100 text-slate-500'
+                    }`}
+                  >
+                    {hw.status}
+                  </span>
+                  {hw.status === 'published' && (
+                    <Link to={`/teacher/homework/${hw.id}/submissions`} className="text-xs font-semibold text-brand-indigo hover:underline">
+                      Submissions
+                    </Link>
+                  )}
+                </div>
               </div>
             ))}
             {homeworkList?.length === 0 && <p className="text-sm text-slate-400">Nothing posted yet.</p>}

@@ -159,14 +159,62 @@ teacherRouter.get('/homework', async (req, res) => {
   res.json(rows);
 });
 
+teacherRouter.get('/homework/:id', async (req, res) => {
+  const hw = await loadOwnHomework(req, res);
+  if (!hw) return;
+  const attachments = await portalDb()('hp_homework_attachments')
+    .select('id', 'file_name', 'mime_type', 'size_bytes')
+    .where({ homework_id: hw.id });
+  res.json({ ...hw, attachments });
+});
+
 teacherRouter.get('/homework/:id/submissions', async (req, res) => {
   const hw = await loadOwnHomework(req, res);
   if (!hw) return;
-  const rows = await portalDb()('hp_homework_submissions as sub')
-    .join('hp_students as st', 'st.id', 'sub.student_id')
-    .select('sub.*', 'st.full_name as studentName', 'st.roll_no')
-    .where('sub.homework_id', hw.id);
-  res.json(rows);
+
+  // Full class roster this homework targeted, left-joined to whatever
+  // submission (if any) exists — so a teacher sees who hasn't submitted at
+  // all, not just the students who did.
+  const targets = await portalDb()('hp_homework_targets').where({ homework_id: hw.id });
+  if (targets.length === 0) {
+    res.json([]);
+    return;
+  }
+  const roster = await portalDb()('hp_students as st')
+    .leftJoin('hp_homework_submissions as sub', function () {
+      this.on('sub.student_id', '=', 'st.id').andOn('sub.homework_id', '=', portalDb().raw('?', [hw.id]));
+    })
+    .select(
+      'st.id as studentId', 'st.full_name as studentName', 'st.roll_no',
+      'sub.id as submissionId', 'sub.submitted_at', 'sub.note',
+      portalDb().raw("coalesce(sub.status, 'pending') as status"),
+      'sub.grade', 'sub.feedback'
+    )
+    .where('st.is_active', true)
+    .where(function () {
+      for (const t of targets) {
+        this.orWhere(function () {
+          this.where('st.class_id', t.class_id);
+          if (t.section_id) this.andWhere('st.section_id', t.section_id);
+        });
+      }
+    })
+    .orderBy('st.full_name');
+
+  const submissionIds = roster.filter((r) => r.submissionId).map((r) => r.submissionId);
+  const attachments = submissionIds.length
+    ? await portalDb()('hp_submission_attachments')
+        .select('id', 'submission_id', 'file_name', 'size_bytes')
+        .whereIn('submission_id', submissionIds)
+    : [];
+  const attachmentsBySubmission = new Map<number, typeof attachments>();
+  for (const a of attachments) {
+    const list = attachmentsBySubmission.get(a.submission_id) ?? [];
+    list.push(a);
+    attachmentsBySubmission.set(a.submission_id, list);
+  }
+
+  res.json(roster.map((r) => ({ ...r, attachments: r.submissionId ? attachmentsBySubmission.get(r.submissionId) ?? [] : [] })));
 });
 
 const gradeSchema = z.object({ grade: z.number().min(0).max(100), feedback: z.string().optional() });

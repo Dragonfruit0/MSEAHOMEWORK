@@ -134,7 +134,7 @@ export function HomeworkDetailPage() {
             <h3 className="text-sm font-bold text-slate-800 mb-3">Your submission</h3>
             {data.submission?.status === 'graded' ? (
               <div className="rounded-xl bg-brand-green/10 text-brand-green-dark px-4 py-3 text-sm">
-                <p className="font-semibold">Graded: {data.submission.grade}/100</p>
+                <p className="font-semibold">Graded: {Number(data.submission.grade)}/100</p>
                 {data.submission.feedback && <p className="mt-1 text-slate-600">{data.submission.feedback}</p>}
               </div>
             ) : alreadySubmitted ? (
