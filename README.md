@@ -70,6 +70,18 @@ already runs it and is reached from the setup wizard like any other
 connection. Local-disk attachment storage persists in the `api-uploads`
 volume; switch to S3 during setup for anything beyond a single-host deploy.
 
+### Portal database location
+
+`PORTAL_DB_*` is plain deploy-time configuration (env vars), not something
+the setup wizard asks about at runtime — deliberately: the server needs a
+working portal DB connection before there's any admin account to run a
+wizard with. If you'd rather the portal's `hp_*` tables live inside the
+school's own database (one fewer database to run) instead of a separate
+one, just point `PORTAL_DB_*` at that database — get a schema/DDL grant
+from the school's DBA and give the portal its own `hp_` prefix there, same
+as anywhere else. Nothing else changes; the source-side connection (set up
+through the wizard) and the portal-side connection are independent.
+
 ## Load testing at scale
 
 The portal is sized around ~40,000 students. `scripts/seed-scale-fixture.mjs`
