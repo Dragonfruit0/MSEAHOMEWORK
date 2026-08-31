@@ -1,0 +1,11 @@
+**/node_modules
+**/dist
+**/*.tsbuildinfo
+apps/api/uploads-demo
+apps/api/uploads
+.env
+.env.*
+!.env.example
+.git
+.github
+**/coverage

@@ -1,0 +1,63 @@
+name: homework-portal
+
+services:
+  portal-db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${PORTAL_DB_NAME:-homework_portal}
+      POSTGRES_USER: ${PORTAL_DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${PORTAL_DB_PASSWORD:?set PORTAL_DB_PASSWORD in .env}
+    volumes:
+      - portal-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${PORTAL_DB_USER:-postgres}']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    ports:
+      # Exposed on the host only for ad-hoc inspection — the api service
+      # talks to it over the compose network, not this port.
+      - '${PORTAL_DB_HOST_PORT:-5432}:5432'
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      portal-db:
+        condition: service_healthy
+    environment:
+      PORT: 4000
+      PORTAL_DB_CLIENT: pg
+      PORTAL_DB_HOST: portal-db
+      PORTAL_DB_PORT: 5432
+      PORTAL_DB_NAME: ${PORTAL_DB_NAME:-homework_portal}
+      PORTAL_DB_USER: ${PORTAL_DB_USER:-postgres}
+      PORTAL_DB_PASSWORD: ${PORTAL_DB_PASSWORD:?set PORTAL_DB_PASSWORD in .env}
+      PORTAL_MASTER_KEY: ${PORTAL_MASTER_KEY:?generate with: openssl rand -hex 32}
+      JWT_SECRET: ${JWT_SECRET:?generate with: openssl rand -hex 32}
+      SYNC_CRON: ${SYNC_CRON:-0 2 * * *}
+      NODE_ENV: production
+    volumes:
+      # Local-disk storage provider's default root — mount a durable volume
+      # here in any real deployment. Ignored entirely if storage is
+      # configured as S3 during setup.
+      - api-uploads:/repo/apps/api/uploads
+    ports:
+      - '${API_HOST_PORT:-4000}:4000'
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - '${WEB_HOST_PORT:-8080}:80'
+
+volumes:
+  portal-db-data:
+  api-uploads:
