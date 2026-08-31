@@ -153,6 +153,38 @@ teacherRouter.post('/homework/:id/publish', async (req, res) => {
   res.json({ ok: true });
 });
 
+/** Pulls a published homework back to draft — it disappears from every student's feed immediately (the feed only ever selects status='published'), but nothing is deleted, so re-publishing restores it exactly as it was. */
+teacherRouter.post('/homework/:id/unpublish', async (req, res) => {
+  const hw = await loadOwnHomework(req, res);
+  if (!hw) return;
+  await portalDb()('hp_homework').where({ id: hw.id }).update({ status: 'draft' });
+  res.json({ ok: true });
+});
+
+const updateHomeworkSchema = z.object({
+  title: z.string().min(1).max(250).optional(),
+  description: z.string().optional(),
+  dueDate: z.string().nullable().optional(),
+});
+
+teacherRouter.patch('/homework/:id', async (req, res) => {
+  const hw = await loadOwnHomework(req, res);
+  if (!hw) return;
+  const parsed = updateHomeworkSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.flatten() });
+    return;
+  }
+  const update: Record<string, unknown> = {};
+  if (parsed.data.title !== undefined) update.title = parsed.data.title;
+  if (parsed.data.description !== undefined) update.description = parsed.data.description;
+  if (parsed.data.dueDate !== undefined) update.due_date = parsed.data.dueDate;
+  if (Object.keys(update).length > 0) {
+    await portalDb()('hp_homework').where({ id: hw.id }).update(update);
+  }
+  res.json({ ok: true });
+});
+
 const TEACHER_HOMEWORK_PAGE_SIZE = 20;
 
 teacherRouter.get('/homework', async (req, res) => {

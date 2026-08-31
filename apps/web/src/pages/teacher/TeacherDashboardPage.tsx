@@ -17,6 +17,7 @@ interface MyClass {
 interface HomeworkRow {
   id: number;
   title: string;
+  description: string | null;
   status: 'draft' | 'published' | 'archived';
   assigned_date: string;
   due_date: string | null;
@@ -169,29 +170,7 @@ export function TeacherDashboardPage() {
           <h2 className="font-bold text-slate-900 mb-4">Your homework</h2>
           <div className="space-y-2">
             {(homeworkList ?? []).map((hw) => (
-              <div key={hw.id} className="flex items-center justify-between rounded-xl border border-slate-100 px-4 py-3">
-                <div>
-                  <p className="text-sm font-semibold text-slate-800">{hw.title}</p>
-                  <p className="text-xs text-slate-400">
-                    Assigned {new Date(hw.assigned_date).toLocaleDateString()}
-                    {hw.due_date && ` · Due ${new Date(hw.due_date).toLocaleDateString()}`}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <span
-                    className={`text-xs font-semibold px-2.5 py-1 rounded-full ${
-                      hw.status === 'published' ? 'bg-brand-green/10 text-brand-green-dark' : 'bg-slate-100 text-slate-500'
-                    }`}
-                  >
-                    {hw.status}
-                  </span>
-                  {hw.status === 'published' && (
-                    <Link to={`/teacher/homework/${hw.id}/submissions`} className="text-xs font-semibold text-brand-indigo hover:underline">
-                      Submissions
-                    </Link>
-                  )}
-                </div>
-              </div>
+              <HomeworkListRow key={hw.id} hw={hw} />
             ))}
             {homeworkList?.length === 0 && <p className="text-sm text-slate-400">Nothing posted yet.</p>}
           </div>
@@ -210,6 +189,116 @@ export function TeacherDashboardPage() {
           )}
         </section>
       </main>
+    </div>
+  );
+}
+
+function HomeworkListRow({ hw }: { hw: HomeworkRow }) {
+  const queryClient = useQueryClient();
+  const [editing, setEditing] = useState(false);
+  const [title, setTitle] = useState(hw.title);
+  const [description, setDescription] = useState(hw.description ?? '');
+  const [dueDate, setDueDate] = useState(hw.due_date ? hw.due_date.slice(0, 10) : '');
+
+  function invalidate() {
+    queryClient.invalidateQueries({ queryKey: ['teacher-homework'] });
+  }
+
+  const saveMutation = useMutation({
+    mutationFn: async () => api.patch(`/teacher/homework/${hw.id}`, { title, description, dueDate: dueDate || null }),
+    onSuccess: () => {
+      setEditing(false);
+      invalidate();
+    },
+  });
+  const unpublishMutation = useMutation({
+    mutationFn: async () => api.post(`/teacher/homework/${hw.id}/unpublish`),
+    onSuccess: invalidate,
+  });
+  const republishMutation = useMutation({
+    mutationFn: async () => api.post(`/teacher/homework/${hw.id}/publish`),
+    onSuccess: invalidate,
+  });
+
+  if (editing) {
+    return (
+      <div className="rounded-xl border border-brand-indigo/30 bg-brand-indigo/5 px-4 py-3 space-y-2">
+        <input
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          className="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm font-semibold"
+        />
+        <textarea
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          rows={2}
+          className="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm"
+        />
+        <div className="flex items-center gap-2">
+          <input
+            type="date"
+            value={dueDate}
+            onChange={(e) => setDueDate(e.target.value)}
+            className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm"
+          />
+          <button
+            onClick={() => saveMutation.mutate()}
+            disabled={!title || saveMutation.isPending}
+            className="rounded-lg bg-brand-indigo text-white font-semibold px-3 py-1.5 text-sm disabled:opacity-50"
+          >
+            Save
+          </button>
+          <button onClick={() => setEditing(false)} className="text-sm text-slate-500">
+            Cancel
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center justify-between rounded-xl border border-slate-100 px-4 py-3">
+      <div>
+        <p className="text-sm font-semibold text-slate-800">{hw.title}</p>
+        <p className="text-xs text-slate-400">
+          Assigned {new Date(hw.assigned_date).toLocaleDateString()}
+          {hw.due_date && ` · Due ${new Date(hw.due_date).toLocaleDateString()}`}
+        </p>
+      </div>
+      <div className="flex items-center gap-2 shrink-0">
+        <span
+          className={`text-xs font-semibold px-2.5 py-1 rounded-full ${
+            hw.status === 'published' ? 'bg-brand-green/10 text-brand-green-dark' : 'bg-slate-100 text-slate-500'
+          }`}
+        >
+          {hw.status}
+        </span>
+        <button onClick={() => setEditing(true)} className="text-xs font-semibold text-slate-500 hover:underline">
+          Edit
+        </button>
+        {hw.status === 'published' ? (
+          <>
+            <Link to={`/teacher/homework/${hw.id}/submissions`} className="text-xs font-semibold text-brand-indigo hover:underline">
+              Submissions
+            </Link>
+            <button
+              onClick={() => unpublishMutation.mutate()}
+              disabled={unpublishMutation.isPending}
+              className="text-xs font-semibold text-rose-500 hover:underline"
+            >
+              Unpublish
+            </button>
+          </>
+        ) : (
+          <button
+            onClick={() => republishMutation.mutate()}
+            disabled={republishMutation.isPending}
+            className="text-xs font-semibold text-brand-green-dark hover:underline"
+          >
+            Publish
+          </button>
+        )}
+      </div>
     </div>
   );
 }
