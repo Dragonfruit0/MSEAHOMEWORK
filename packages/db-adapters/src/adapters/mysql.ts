@@ -92,4 +92,18 @@ export class MysqlAdapter extends BaseAdapter {
     // ORDER BY over the entity's primary key, so LIMIT/OFFSET pages are stable.
     return `${sql.replace(/;\s*$/, '')} limit ${limit} offset ${offset}`;
   }
+
+  /**
+   * mysql2's raw() reply is a [rows, fields] tuple, not a { rows } object or
+   * a bare row array — the base implementation's Array.isArray check matches
+   * that outer tuple itself and returns it as if it were two row objects.
+   * Every SELECT we issue through raw() here goes through the tuple shape,
+   * so unwrap it explicitly.
+   */
+  protected override unwrapRows(result: unknown): Record<string, unknown>[] {
+    if (Array.isArray(result) && result.length === 2 && Array.isArray(result[0])) {
+      return result[0] as Record<string, unknown>[];
+    }
+    return super.unwrapRows(result);
+  }
 }
