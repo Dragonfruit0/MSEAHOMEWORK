@@ -47,7 +47,8 @@ export class PostgresAdapter extends BaseAdapter {
     return this.unwrapRows(rows).map((r) => ({
       schema,
       name: r.name as string,
-      approxRowCount: Number(r.approx_row_count ?? 0),
+      // pg_class.reltuples is -1 until the table's first ANALYZE; treat that as "unknown" (0) rather than showing a negative count.
+      approxRowCount: Math.max(0, Number(r.approx_row_count ?? 0)),
     }));
   }
 

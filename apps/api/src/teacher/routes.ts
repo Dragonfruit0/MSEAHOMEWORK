@@ -1,11 +1,17 @@
 import { Router } from 'express';
 import multer from 'multer';
-import { fileTypeFromBuffer } from 'file-type';
 import { v4 as uuid } from 'uuid';
 import { z } from 'zod';
 import { portalDb } from '../db/portal-connection';
 import { requireAuth, requireRole } from '../middleware/auth';
 import { getActiveStorageProvider } from '../storage/factory';
+
+// file-type is ESM-only with no CommonJS export condition; import it
+// dynamically so it works under the api's CommonJS build/runtime (tsx/tsc).
+async function fileTypeFromBuffer(buffer: Buffer) {
+  const mod = await import('file-type');
+  return mod.fileTypeFromBuffer(buffer);
+}
 
 export const teacherRouter = Router();
 teacherRouter.use(requireAuth, requireRole('TEACHER'));

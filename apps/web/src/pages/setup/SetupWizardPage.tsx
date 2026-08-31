@@ -62,6 +62,10 @@ export function SetupWizardPage() {
   const [selectedSchema, setSelectedSchema] = useState('');
   const [entityTable, setEntityTable] = useState<Partial<Record<LogicalEntityName, string>>>({});
   const [entityFields, setEntityFields] = useState<Partial<Record<LogicalEntityName, Record<string, string>>>>({});
+  // full_name is the one field commonly split across two source columns
+  // (first/last name) rather than a single column — track that separately
+  // per entity so saveMapping() can turn it into a concat mapping.
+  const [nameConcat, setNameConcat] = useState<Partial<Record<LogicalEntityName, { enabled: boolean; lastNameColumn: string }>>>({});
   const [mappingVersion, setMappingVersion] = useState<number | null>(null);
   const [mappingIssues, setMappingIssues] = useState<unknown[] | null>(null);
 
@@ -127,7 +131,14 @@ export function SetupWizardPage() {
       const table = entityTable[entity];
       const fields = entityFields[entity];
       if (!table || !fields) continue;
-      entities[entity] = { sourceTable: table, fields };
+      const concat = nameConcat[entity];
+      const finalFields: Record<string, string | string[]> = { ...fields };
+      let nameStrategy: 'single' | 'concat' | undefined;
+      if (concat?.enabled && fields.full_name && concat.lastNameColumn) {
+        finalFields.full_name = [fields.full_name, concat.lastNameColumn];
+        nameStrategy = 'concat';
+      }
+      entities[entity] = { sourceTable: table, fields: finalFields, ...(nameStrategy ? { nameStrategy, nameSeparator: ' ' } : {}) };
     }
     const res = await api.post('/setup/mapping', { sourceConnectionId, entities, relationships: [] });
     setMappingVersion(res.data.version);
@@ -297,6 +308,8 @@ export function SetupWizardPage() {
                   fields={entityFields[entity] ?? {}}
                   onSetField={(field, col) => setField(entity, field, col)}
                   useColumns={() => useColumnsFor(entity)}
+                  nameConcat={nameConcat[entity] ?? { enabled: false, lastNameColumn: '' }}
+                  onChangeNameConcat={(v) => setNameConcat((prev) => ({ ...prev, [entity]: v }))}
                 />
               ))}
               {mappingIssues && mappingIssues.length > 0 && (
@@ -357,6 +370,8 @@ function EntityMapper({
   fields,
   onSetField,
   useColumns,
+  nameConcat,
+  onChangeNameConcat,
 }: {
   entity: LogicalEntityName;
   tables: TableInfo[];
@@ -365,6 +380,8 @@ function EntityMapper({
   fields: Record<string, string>;
   onSetField: (field: string, col: string) => void;
   useColumns: () => { data?: ColumnInfo[] };
+  nameConcat: { enabled: boolean; lastNameColumn: string };
+  onChangeNameConcat: (v: { enabled: boolean; lastNameColumn: string }) => void;
 }) {
   const { data: columns } = useColumns();
   const required = REQUIRED_FIELDS[entity];
@@ -390,24 +407,50 @@ function EntityMapper({
       {selectedTable && (
         <div className="grid sm:grid-cols-2 gap-2">
           {[...required.map((f) => [f, true] as const), ...optional.map((f) => [f, false] as const)].map(([field, isRequired]) => (
-            <label key={field} className="text-xs text-slate-500 flex items-center gap-2">
-              <span className="w-28 shrink-0">
-                {field}
-                {isRequired && <span className="text-rose-500">*</span>}
-              </span>
-              <select
-                value={fields[field] ?? ''}
-                onChange={(e) => onSetField(field, e.target.value)}
-                className="flex-1 rounded-lg border border-slate-200 px-2 py-1.5"
-              >
-                <option value="">—</option>
-                {(columns ?? []).map((c) => (
-                  <option key={c.name} value={c.name}>
-                    {c.name} ({c.dataType})
-                  </option>
-                ))}
-              </select>
-            </label>
+            <div key={field} className={field === 'full_name' ? 'sm:col-span-2 space-y-1.5' : undefined}>
+              <label className="text-xs text-slate-500 flex items-center gap-2">
+                <span className="w-28 shrink-0">
+                  {field}
+                  {isRequired && <span className="text-rose-500">*</span>}
+                </span>
+                <select
+                  value={fields[field] ?? ''}
+                  onChange={(e) => onSetField(field, e.target.value)}
+                  className="flex-1 rounded-lg border border-slate-200 px-2 py-1.5"
+                >
+                  <option value="">—</option>
+                  {(columns ?? []).map((c) => (
+                    <option key={c.name} value={c.name}>
+                      {c.name} ({c.dataType})
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {field === 'full_name' && (
+                <label className="text-xs text-slate-500 flex items-center gap-2 pl-[8.5rem]">
+                  <input
+                    type="checkbox"
+                    checked={nameConcat.enabled}
+                    onChange={(e) => onChangeNameConcat({ ...nameConcat, enabled: e.target.checked })}
+                  />
+                  <span className="shrink-0">Split as first + last name:</span>
+                  {nameConcat.enabled && (
+                    <select
+                      value={nameConcat.lastNameColumn}
+                      onChange={(e) => onChangeNameConcat({ ...nameConcat, lastNameColumn: e.target.value })}
+                      className="flex-1 rounded-lg border border-slate-200 px-2 py-1.5"
+                    >
+                      <option value="">— last name column —</option>
+                      {(columns ?? []).map((c) => (
+                        <option key={c.name} value={c.name}>
+                          {c.name} ({c.dataType})
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </label>
+              )}
+            </div>
           ))}
         </div>
       )}
