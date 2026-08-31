@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import type { Role } from '@homework-portal/shared';
 
@@ -24,9 +25,17 @@ export function verifyAccessToken(token: string): AccessTokenPayload {
   return jwt.verify(token, getJwtSecret()) as unknown as AccessTokenPayload;
 }
 
-/** Long-lived, opaque, random refresh tokens are stored hashed — this just generates one. */
+export const REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+
+/**
+ * Long-lived, opaque, random refresh tokens. Only the sha256 hash is ever
+ * stored (hp_refresh_tokens.token_hash) so a DB read never discloses a
+ * usable token, and rotation/revocation is a plain row update.
+ */
 export function generateRefreshToken(): string {
-  return jwt.sign({ nonce: Date.now() + Math.random() }, getJwtSecret() + ':refresh', {
-    expiresIn: '30d',
-  });
+  return crypto.randomBytes(48).toString('hex');
+}
+
+export function hashRefreshToken(token: string): string {
+  return crypto.createHash('sha256').update(token).digest('hex');
 }

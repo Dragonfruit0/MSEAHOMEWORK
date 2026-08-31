@@ -1,3 +1,4 @@
+import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import express from 'express';
 import { adminRouter } from './admin/routes';
@@ -10,7 +11,10 @@ import { teacherRouter } from './teacher/routes';
 
 export function createApp() {
   const app = express();
-  app.use(cors());
+  // origin:true reflects the request's Origin header (rather than "*"), which
+  // is required for the refresh-token cookie (credentials) to be accepted.
+  app.use(cors({ origin: true, credentials: true }));
+  app.use(cookieParser());
   app.use(express.json({ limit: '2mb' }));
 
   app.get('/api/health', (_req, res) => res.json({ ok: true }));

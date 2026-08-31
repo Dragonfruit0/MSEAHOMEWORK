@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
-import { api } from '../api/client';
+import { api, getAccessToken, setAccessToken } from '../api/client';
 
 export type Role = 'SUPER_ADMIN' | 'BRANCH_HEAD' | 'TEACHER' | 'STUDENT' | 'PARENT';
 
@@ -12,8 +12,10 @@ export interface AuthUser {
 interface AuthState {
   user: AuthUser | null;
   loading: boolean;
+  mustChangePassword: boolean;
   login: (loginId: string, password: string) => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
+  clearMustChangePassword: () => void;
 }
 
 const AuthContext = createContext<AuthState | null>(null);
@@ -21,32 +23,65 @@ const AuthContext = createContext<AuthState | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
+  const [mustChangePassword, setMustChangePassword] = useState(false);
 
   useEffect(() => {
-    const token = localStorage.getItem('hp_access_token');
-    if (!token) {
-      setLoading(false);
-      return;
-    }
-    api
-      .get('/auth/me')
-      .then((res) => setUser({ id: res.data.id, loginId: res.data.login_id, role: res.data.role }))
-      .catch(() => localStorage.removeItem('hp_access_token'))
-      .finally(() => setLoading(false));
+    (async () => {
+      const token = getAccessToken();
+      if (token) {
+        try {
+          const res = await api.get('/auth/me');
+          setUser({ id: res.data.id, loginId: res.data.login_id, role: res.data.role });
+          setMustChangePassword(res.data.must_change_password);
+          setLoading(false);
+          return;
+        } catch {
+          setAccessToken(null);
+        }
+      }
+      // No (or stale) access token — the httpOnly refresh cookie might still
+      // be valid (e.g. the page was reloaded well after the 15-minute access
+      // token expired), so try a silent refresh before giving up.
+      try {
+        const res = await api.post('/auth/refresh');
+        setAccessToken(res.data.accessToken);
+        setUser(res.data.user);
+        setMustChangePassword(res.data.mustChangePassword);
+      } catch {
+        // Not logged in — fine, land on /login.
+      } finally {
+        setLoading(false);
+      }
+    })();
   }, []);
 
   async function login(loginId: string, password: string) {
     const res = await api.post('/auth/login', { loginId, password });
-    localStorage.setItem('hp_access_token', res.data.accessToken);
+    setAccessToken(res.data.accessToken);
     setUser(res.data.user);
+    setMustChangePassword(res.data.mustChangePassword);
   }
 
-  function logout() {
-    localStorage.removeItem('hp_access_token');
+  async function logout() {
+    try {
+      await api.post('/auth/logout');
+    } catch {
+      // best-effort — clear local state regardless
+    }
+    setAccessToken(null);
     setUser(null);
+    setMustChangePassword(false);
   }
 
-  return <AuthContext.Provider value={{ user, loading, login, logout }}>{children}</AuthContext.Provider>;
+  function clearMustChangePassword() {
+    setMustChangePassword(false);
+  }
+
+  return (
+    <AuthContext.Provider value={{ user, loading, mustChangePassword, login, logout, clearMustChangePassword }}>
+      {children}
+    </AuthContext.Provider>
+  );
 }
 
 export function useAuth(): AuthState {
