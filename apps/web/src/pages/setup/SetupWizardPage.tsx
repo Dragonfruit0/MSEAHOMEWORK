@@ -27,7 +27,7 @@ type Engine = 'mssql' | 'mysql' | 'postgres' | 'oracle';
 
 const ENTITIES: LogicalEntityName[] = ['branch', 'class', 'section', 'subject', 'teacher', 'student'];
 
-const STEP_LABELS = ['Admin account', 'Connect', 'Browse', 'Map fields', 'Storage', 'Finish'];
+const STEP_LABELS = ['Admin account', 'Connect', 'Browse', 'Map fields', 'Validate', 'Storage', 'Finish'];
 
 interface ColumnInfo {
   name: string;
@@ -37,6 +37,13 @@ interface TableInfo {
   schema: string;
   name: string;
   approxRowCount?: number;
+}
+interface EntityValidation {
+  rowCount: number;
+  nulls: Record<string, number>;
+  duplicatePrimaryKeyCount: number;
+  orphans: Record<string, number>;
+  preview: Record<string, unknown>[];
 }
 
 export function SetupWizardPage() {
@@ -68,6 +75,10 @@ export function SetupWizardPage() {
   const [nameConcat, setNameConcat] = useState<Partial<Record<LogicalEntityName, { enabled: boolean; lastNameColumn: string }>>>({});
   const [mappingVersion, setMappingVersion] = useState<number | null>(null);
   const [mappingIssues, setMappingIssues] = useState<unknown[] | null>(null);
+
+  // Step 4: validate
+  const [validation, setValidation] = useState<Record<string, EntityValidation> | null>(null);
+  const [validating, setValidating] = useState(false);
 
   // Step 4: storage
   const [storageProvider, setStorageProvider] = useState<'local' | 's3'>('local');
@@ -144,7 +155,25 @@ export function SetupWizardPage() {
     setMappingVersion(res.data.version);
     setMappingIssues(res.data.issues ?? []);
     setStep(4);
+    setValidation(null);
+    runValidation(res.data.version);
   }
+
+  async function runValidation(version: number) {
+    setValidating(true);
+    try {
+      const res = await api.post('/setup/validate', { version, sourceConnectionId });
+      setValidation(res.data);
+    } finally {
+      setValidating(false);
+    }
+  }
+
+  const hasBlockingIssues =
+    validation != null &&
+    Object.values(validation).some(
+      (v) => v.duplicatePrimaryKeyCount > 0 || Object.values(v.nulls).some((n) => n > 0)
+    );
 
   async function saveStorage() {
     await api.post('/setup/storage', {
@@ -152,7 +181,7 @@ export function SetupWizardPage() {
       config: storageProvider === 'local' ? { rootDir } : {},
       maxFileMb,
     });
-    setStep(5);
+    setStep(6);
   }
 
   async function completeSetup() {
@@ -322,6 +351,73 @@ export function SetupWizardPage() {
           )}
 
           {step === 4 && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="font-bold text-slate-900">Check the data before committing</h2>
+                <button
+                  onClick={() => mappingVersion && runValidation(mappingVersion)}
+                  disabled={validating}
+                  className="text-xs font-semibold text-brand-indigo hover:underline disabled:opacity-50"
+                >
+                  {validating ? 'Checking…' : 'Re-check'}
+                </button>
+              </div>
+              {validating && !validation && <p className="text-sm text-slate-400">Running checks against the source database…</p>}
+              {validation &&
+                Object.entries(validation).map(([entity, v]) => {
+                  const requiredNullIssues = Object.entries(v.nulls).filter(([, count]) => count > 0);
+                  const orphanIssues = Object.entries(v.orphans).filter(([, count]) => count > 0);
+                  const hasError = requiredNullIssues.length > 0 || v.duplicatePrimaryKeyCount > 0;
+                  return (
+                    <div
+                      key={entity}
+                      className={`rounded-xl border p-4 ${hasError ? 'border-rose-200 bg-rose-50' : 'border-slate-100'}`}
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <h3 className="font-semibold text-slate-800 capitalize">{entity}</h3>
+                        <span className="text-xs text-slate-500">{v.rowCount.toLocaleString()} rows</span>
+                      </div>
+                      {!hasError && orphanIssues.length === 0 && (
+                        <p className="text-xs text-brand-green-dark">✓ No issues found.</p>
+                      )}
+                      {requiredNullIssues.length > 0 && (
+                        <p className="text-xs text-rose-700">
+                          Missing required values: {requiredNullIssues.map(([f, c]) => `${f} (${c})`).join(', ')}
+                        </p>
+                      )}
+                      {v.duplicatePrimaryKeyCount > 0 && (
+                        <p className="text-xs text-rose-700">{v.duplicatePrimaryKeyCount} duplicate ID(s) — each row must have a unique identifier.</p>
+                      )}
+                      {orphanIssues.length > 0 && (
+                        <p className="text-xs text-amber-700">
+                          Orphaned references (won't block sync, but these rows won't link correctly):{' '}
+                          {orphanIssues.map(([f, c]) => `${f} (${c})`).join(', ')}
+                        </p>
+                      )}
+                    </div>
+                  );
+                })}
+              {hasBlockingIssues && (
+                <p className="text-xs text-rose-600 font-semibold">
+                  Fix the missing values or duplicate IDs above (usually by adjusting the field mapping) before continuing.
+                </p>
+              )}
+              <div className="flex gap-2">
+                <button onClick={() => setStep(3)} className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700">
+                  Back to mapping
+                </button>
+                <button
+                  disabled={!validation || hasBlockingIssues}
+                  onClick={() => setStep(5)}
+                  className="rounded-xl bg-brand-indigo text-white font-semibold px-4 py-2.5 text-sm disabled:opacity-50"
+                >
+                  Looks good, continue
+                </button>
+              </div>
+            </div>
+          )}
+
+          {step === 5 && (
             <div className="space-y-3 max-w-sm">
               <h2 className="font-bold text-slate-900">Where should homework attachments live?</h2>
               <select value={storageProvider} onChange={(e) => setStorageProvider(e.target.value as 'local' | 's3')} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm">
@@ -341,7 +437,7 @@ export function SetupWizardPage() {
             </div>
           )}
 
-          {step === 5 && (
+          {step === 6 && (
             <div className="space-y-3 max-w-sm">
               <h2 className="font-bold text-slate-900">Ready to go</h2>
               <p className="text-sm text-slate-500">

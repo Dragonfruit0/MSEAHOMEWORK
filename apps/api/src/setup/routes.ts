@@ -1,8 +1,8 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { createAdapter, ENGINE_DEFAULT_PORT, type Engine } from '@homework-portal/db-adapters';
-import { validateMappingStructure } from '@homework-portal/mapping';
-import type { EntityMappingDocument } from '@homework-portal/shared';
+import { buildEntitySelect, validateMappingStructure } from '@homework-portal/mapping';
+import { REQUIRED_FIELDS, type EntityMappingDocument, type LogicalEntityName } from '@homework-portal/shared';
 import { portalDb } from '../db/portal-connection';
 import { requireAuth, requireRole } from '../middleware/auth';
 import { hashPassword } from '../auth/password';
@@ -188,7 +188,21 @@ setupRouter.post('/mapping', async (req, res) => {
   }
 });
 
-/** Step 5: data-quality validation + preview against a saved mapping version. */
+/**
+ * Step 5: data-quality validation against a saved mapping version. Pulls
+ * every mapped entity's full row set through the same buildEntitySelect()
+ * the sync engine itself uses (so a passing check here is a real guarantee,
+ * not a preview of a different query), then checks — per entity — the row
+ * count, null counts in required fields, duplicate primary identifiers, and
+ * orphaned foreign-key references (a "*_ref" field whose value matches no
+ * row in the entity it's supposed to point at, by naming convention:
+ * class_ref -> the mapped "class" entity's own primary field).
+ *
+ * For a genuinely large school this pulls the full row set into memory
+ * once, which costs real seconds at 40k+ rows — acceptable for a one-time
+ * setup step, and no worse than what the first sync does anyway (just not
+ * batched). Not something to run on every request.
+ */
 setupRouter.post('/validate', async (req, res) => {
   const { version, sourceConnectionId } = req.body as { version: number; sourceConnectionId: number };
   const mappingRow = await portalDb()('hp_entity_mappings').where({ version }).first();
@@ -200,15 +214,61 @@ setupRouter.post('/validate', async (req, res) => {
     typeof mappingRow.mapping_json === 'string' ? JSON.parse(mappingRow.mapping_json) : mappingRow.mapping_json;
   const adapter = await adapterForConnection(sourceConnectionId);
   try {
-    const results: Record<string, unknown> = {};
-    for (const [entityName, mapping] of Object.entries(doc.entities)) {
+    const snapshot = await snapshotForMapping(adapter, doc);
+    const quote = (name: string) => adapter.quoteIdent(name);
+
+    const rowsByEntity: Partial<Record<LogicalEntityName, Record<string, unknown>[]>> = {};
+    for (const [entityName, mapping] of Object.entries(doc.entities) as [LogicalEntityName, EntityMappingDocument['entities'][LogicalEntityName]][]) {
       if (!mapping) continue;
-      const idx = mapping.sourceTable.lastIndexOf('.');
-      const schema = mapping.sourceTable.slice(0, idx);
-      const table = mapping.sourceTable.slice(idx + 1);
-      const sample = await adapter.sampleRows(schema, table, 20);
-      results[entityName] = { sampleRowCount: sample.length, preview: sample.slice(0, 5) };
+      const { sql, params } = buildEntitySelect(entityName, mapping, snapshot, adapter.engine, quote);
+      rowsByEntity[entityName] = await adapter.runQuery(sql, params);
     }
+
+    const results: Record<
+      string,
+      {
+        rowCount: number;
+        nulls: Record<string, number>;
+        duplicatePrimaryKeyCount: number;
+        orphans: Record<string, number>;
+        preview: Record<string, unknown>[];
+      }
+    > = {};
+
+    for (const [entityName, rows] of Object.entries(rowsByEntity) as [LogicalEntityName, Record<string, unknown>[]][]) {
+      const required = REQUIRED_FIELDS[entityName];
+      const mapping = doc.entities[entityName]!;
+
+      const nulls: Record<string, number> = {};
+      for (const field of required) {
+        if (!(field in mapping.fields)) continue;
+        nulls[field] = rows.filter((r) => r[field] == null || r[field] === '').length;
+      }
+
+      const primaryField = required[0]!;
+      const pkValues = rows.map((r) => r[primaryField]).filter((v) => v != null);
+      const duplicatePrimaryKeyCount = Math.max(0, pkValues.length - new Set(pkValues.map(String)).size);
+
+      const orphans: Record<string, number> = {};
+      for (const field of Object.keys(mapping.fields)) {
+        if (!field.endsWith('_ref')) continue;
+        const parentEntity = field.slice(0, -'_ref'.length) as LogicalEntityName;
+        const parentRows = rowsByEntity[parentEntity];
+        if (!parentRows) continue; // parent entity isn't mapped — can't check this reference
+        const parentPrimaryField = REQUIRED_FIELDS[parentEntity][0]!;
+        const parentKeys = new Set(parentRows.map((r) => String(r[parentPrimaryField])));
+        orphans[field] = rows.filter((r) => r[field] != null && !parentKeys.has(String(r[field]))).length;
+      }
+
+      results[entityName] = {
+        rowCount: rows.length,
+        nulls,
+        duplicatePrimaryKeyCount,
+        orphans,
+        preview: rows.slice(0, 5),
+      };
+    }
+
     res.json(results);
   } finally {
     await adapter.close();
