@@ -42,7 +42,7 @@ export async function loadConnectionConfig(id: number): Promise<ConnectionConfig
 
 export async function adapterForConnection(id: number): Promise<DbAdapter> {
   const config = await loadConnectionConfig(id);
-  return createAdapter(config);
+  return await createAdapter(config);
 }
 
 export async function activateConnection(id: number): Promise<void> {

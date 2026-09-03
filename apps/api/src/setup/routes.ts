@@ -105,7 +105,7 @@ setupRouter.post('/test-connection', async (req, res) => {
     return;
   }
   const cfg = { ...parsed.data, port: parsed.data.port ?? ENGINE_DEFAULT_PORT[parsed.data.engine as Engine] };
-  const adapter = createAdapter(cfg);
+  const adapter = await createAdapter(cfg);
   try {
     const result = await adapter.testConnection();
     res.json(result);
