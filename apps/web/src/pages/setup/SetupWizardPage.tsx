@@ -124,8 +124,11 @@ export function SetupWizardPage() {
   const [validating, setValidating] = useState(false);
 
   // Step 4: storage
-  const [storageProvider, setStorageProvider] = useState<'local' | 's3'>('local');
+  const [storageProvider, setStorageProvider] = useState<'local' | 's3' | 'supabase'>('local');
   const [rootDir, setRootDir] = useState('./uploads');
+  const [supabaseProjectUrl, setSupabaseProjectUrl] = useState('');
+  const [supabaseServiceRoleKey, setSupabaseServiceRoleKey] = useState('');
+  const [supabaseBucket, setSupabaseBucket] = useState('homework-attachments');
   const [maxFileMb, setMaxFileMb] = useState(25);
 
   const connectionPayload = () => ({
@@ -231,9 +234,15 @@ export function SetupWizardPage() {
     );
 
   async function saveStorage() {
+    const config =
+      storageProvider === 'local'
+        ? { rootDir }
+        : storageProvider === 'supabase'
+          ? { projectUrl: supabaseProjectUrl, serviceRoleKey: supabaseServiceRoleKey, bucket: supabaseBucket }
+          : {};
     await api.post('/setup/storage', {
       provider: storageProvider,
-      config: storageProvider === 'local' ? { rootDir } : {},
+      config,
       maxFileMb,
     });
     setStep(6);
@@ -530,12 +539,44 @@ export function SetupWizardPage() {
           {step === 5 && (
             <div className="space-y-3 max-w-sm">
               <h2 className="font-bold text-slate-900">Where should homework attachments live?</h2>
-              <select value={storageProvider} onChange={(e) => setStorageProvider(e.target.value as 'local' | 's3')} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm">
+              <select
+                value={storageProvider}
+                onChange={(e) => setStorageProvider(e.target.value as 'local' | 's3' | 'supabase')}
+                className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
+              >
                 <option value="local">Local disk / network path</option>
                 <option value="s3">S3-compatible object storage</option>
+                <option value="supabase">Supabase Storage</option>
               </select>
               {storageProvider === 'local' && (
                 <input value={rootDir} onChange={(e) => setRootDir(e.target.value)} placeholder="Storage path" className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" />
+              )}
+              {storageProvider === 'supabase' && (
+                <div className="space-y-2">
+                  <input
+                    value={supabaseProjectUrl}
+                    onChange={(e) => setSupabaseProjectUrl(e.target.value)}
+                    placeholder="Project URL (https://xxxx.supabase.co)"
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
+                  />
+                  <input
+                    type="password"
+                    value={supabaseServiceRoleKey}
+                    onChange={(e) => setSupabaseServiceRoleKey(e.target.value)}
+                    placeholder="service_role key"
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
+                  />
+                  <input
+                    value={supabaseBucket}
+                    onChange={(e) => setSupabaseBucket(e.target.value)}
+                    placeholder="Bucket name"
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
+                  />
+                  <p className="text-xs text-slate-400">
+                    Project Settings → API → service_role key (not the anon key). The bucket is
+                    created automatically if it doesn't exist yet, kept private.
+                  </p>
+                </div>
               )}
               <div>
                 <label className="block text-xs font-semibold text-slate-500 mb-1">Max file size (MB)</label>

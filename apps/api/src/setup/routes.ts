@@ -327,7 +327,7 @@ setupRouter.post('/validate', async (req, res) => {
 
 /** Step 6: storage config (local disk or S3-compatible). */
 const storageSchema = z.object({
-  provider: z.enum(['local', 's3']),
+  provider: z.enum(['local', 's3', 'supabase']),
   config: z.record(z.unknown()),
   maxFileMb: z.number().default(25),
   allowedExtensions: z.array(z.string()).optional(),

@@ -2,6 +2,7 @@ import path from 'path';
 import { portalDb } from '../db/portal-connection';
 import { LocalStorageProvider } from './local-provider';
 import { S3StorageProvider } from './s3-provider';
+import { SupabaseStorageProvider } from './supabase-provider';
 import type { StorageProvider } from './provider';
 
 export async function getActiveStorageProvider(): Promise<{
@@ -14,10 +15,14 @@ export async function getActiveStorageProvider(): Promise<{
   const config = typeof row.config_json === 'string' ? JSON.parse(row.config_json) : row.config_json;
   const allowedExtensions = typeof row.allowed_extensions === 'string' ? JSON.parse(row.allowed_extensions) : row.allowed_extensions;
 
-  const provider =
-    row.provider === 's3'
-      ? new S3StorageProvider(config)
-      : new LocalStorageProvider(config.rootDir ?? path.join(process.cwd(), 'uploads'));
+  let provider: StorageProvider;
+  if (row.provider === 's3') {
+    provider = new S3StorageProvider(config);
+  } else if (row.provider === 'supabase') {
+    provider = new SupabaseStorageProvider(config);
+  } else {
+    provider = new LocalStorageProvider(config.rootDir ?? path.join(process.cwd(), 'uploads'));
+  }
 
   return { provider, maxFileMb: row.max_file_mb, allowedExtensions };
 }
