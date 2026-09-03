@@ -11,6 +11,7 @@ import { TeacherSubmissionsPage } from './pages/teacher/TeacherSubmissionsPage';
 import { SetupWizardPage } from './pages/setup/SetupWizardPage';
 import { CalendarPage } from './pages/CalendarPage';
 import { ProfilePage } from './pages/ProfilePage';
+import { GuidePage } from './pages/GuidePage';
 
 const queryClient = new QueryClient();
 
@@ -21,6 +22,7 @@ export function App() {
         <BrowserRouter>
           <Routes>
             <Route path="/login" element={<LoginPage />} />
+            <Route path="/guide" element={<GuidePage />} />
             <Route path="/setup" element={<SetupWizardPage />} />
             {/* Not wrapped in ProtectedRoute: that component redirects here
                 whenever mustChangePassword is set, so wrapping it would loop. */}
