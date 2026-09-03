@@ -39,6 +39,11 @@ function loadPortalDbConfig(): PortalDbConfig {
       database: process.env.PORTAL_DB_NAME ?? 'homework_portal',
       user: process.env.PORTAL_DB_USER ?? 'postgres',
       password: process.env.PORTAL_DB_PASSWORD ?? 'postgres',
+      // Managed providers (Supabase included) require TLS and terminate it
+      // with a cert chain node's default CA list won't validate — set
+      // PORTAL_DB_SSL=true for those; leave unset for a local/Docker
+      // Postgres that isn't listening for TLS at all.
+      ...(process.env.PORTAL_DB_SSL === 'true' ? { ssl: { rejectUnauthorized: false } } : {}),
     },
   };
 }
@@ -51,7 +56,16 @@ export function portalDb(): Knex {
     instance = knex({
       client: cfg.client,
       connection: cfg.connection,
-      pool: { min: 1, max: 10 },
+      // Small on purpose: in a serverless deployment, many function
+      // instances can be warm concurrently, each holding its own pool —
+      // the *aggregate* connection count across all of them is what has to
+      // stay under the database's limit, not any single instance's pool.
+      // Point a serverless deployment at a connection-pooling endpoint
+      // (e.g. Supabase's transaction pooler) rather than raising this.
+      pool: {
+        min: Number(process.env.PORTAL_DB_POOL_MIN ?? 0),
+        max: Number(process.env.PORTAL_DB_POOL_MAX ?? 5),
+      },
     });
   }
   return instance;

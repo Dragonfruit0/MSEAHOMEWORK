@@ -16,6 +16,7 @@ const config: Knex.Config = {
     database: process.env.PORTAL_DB_NAME ?? 'homework_portal',
     user: process.env.PORTAL_DB_USER ?? 'postgres',
     password: process.env.PORTAL_DB_PASSWORD ?? 'postgres',
+    ...(process.env.PORTAL_DB_SSL === 'true' ? { ssl: { rejectUnauthorized: false } } : {}),
   },
   migrations: {
     directory: './migrations',
