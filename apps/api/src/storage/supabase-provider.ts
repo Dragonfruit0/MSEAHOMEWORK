@@ -31,23 +31,31 @@ export class SupabaseStorageProvider implements StorageProvider {
     };
   }
 
-  /** Creates the configured bucket on first use if it doesn't already exist — the admin shouldn't need a separate manual step in the Supabase dashboard. */
+  /**
+   * Creates the configured bucket on first use if it doesn't already exist
+   * — the admin shouldn't need a separate manual step in the Supabase
+   * dashboard. Deliberately does NOT branch on the check call's status code:
+   * a missing bucket comes back as HTTP 400 (not 404) with a body claiming
+   * `"statusCode":"404"` as a string inside it — confirmed against a real
+   * project, not assumed. Any non-ok check is treated as "attempt to create
+   * it"; the create call's own response is what's actually authoritative.
+   */
   private async ensureBucket(): Promise<void> {
     if (this.bucketEnsured) return;
     const check = await fetch(`${this.baseUrl}/bucket/${encodeURIComponent(this.config.bucket)}`, {
       headers: this.headers(),
     });
-    if (check.status === 404) {
-      const create = await fetch(`${this.baseUrl}/bucket`, {
-        method: 'POST',
-        headers: this.headers({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify({ id: this.config.bucket, name: this.config.bucket, public: false }),
-      });
-      if (!create.ok && create.status !== 409 /* already exists, created by a concurrent request */) {
-        throw new Error(`Could not create Supabase Storage bucket "${this.config.bucket}": ${create.status} ${await create.text()}`);
-      }
-    } else if (!check.ok) {
-      throw new Error(`Could not verify Supabase Storage bucket "${this.config.bucket}": ${check.status} ${await check.text()}`);
+    if (check.ok) {
+      this.bucketEnsured = true;
+      return;
+    }
+    const create = await fetch(`${this.baseUrl}/bucket`, {
+      method: 'POST',
+      headers: this.headers({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ id: this.config.bucket, name: this.config.bucket, public: false }),
+    });
+    if (!create.ok && create.status !== 409 /* already exists, created by a concurrent request */) {
+      throw new Error(`Could not create Supabase Storage bucket "${this.config.bucket}": ${create.status} ${await create.text()}`);
     }
     this.bucketEnsured = true;
   }
