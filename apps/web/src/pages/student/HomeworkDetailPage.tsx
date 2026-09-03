@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { api } from '../../api/client';
+import { api, downloadAttachment } from '../../api/client';
 import { subjectStyle } from '../../components/subjectStyle';
 
 interface Attachment {
@@ -111,10 +111,11 @@ export function HomeworkDetailPage() {
             <h3 className="text-sm font-bold text-slate-800 mb-3">Attachments</h3>
             <div className="space-y-2">
               {data.attachments.map((a) => (
-                <a
+                <button
                   key={a.id}
-                  href={`/api/attachments/${a.id}/download`}
-                  className="flex items-center gap-3 rounded-xl border border-slate-100 px-3 py-2.5 hover:bg-slate-50 transition"
+                  type="button"
+                  onClick={() => downloadAttachment(`/attachments/${a.id}/download`, a.file_name)}
+                  className="w-full flex items-center gap-3 rounded-xl border border-slate-100 px-3 py-2.5 hover:bg-slate-50 transition text-left"
                 >
                   <span className="h-8 w-8 rounded-lg bg-brand-indigo/10 text-brand-indigo flex items-center justify-center text-xs font-bold">
                     {a.file_name.split('.').pop()?.toUpperCase().slice(0, 3)}
@@ -123,7 +124,7 @@ export function HomeworkDetailPage() {
                     <p className="text-sm font-medium text-slate-800 truncate">{a.file_name}</p>
                     <p className="text-xs text-slate-400">{formatBytes(a.size_bytes)}</p>
                   </span>
-                </a>
+                </button>
               ))}
             </div>
           </div>

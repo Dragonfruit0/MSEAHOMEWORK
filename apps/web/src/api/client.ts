@@ -45,6 +45,21 @@ async function refreshAccessToken(): Promise<string | null> {
   return refreshPromise;
 }
 
+// Attachment downloads must go through this (not a plain <a href>) because
+// the download route requires the bearer token, which a browser navigation
+// never sends — it lives in localStorage, not a cookie. Axios follows the
+// route's redirect to the storage provider's own signed URL transparently,
+// so this works the same whether files are stored locally or in Supabase.
+export async function downloadAttachment(url: string, filename: string): Promise<void> {
+  const res = await api.get(url, { responseType: 'blob' });
+  const blobUrl = URL.createObjectURL(res.data as Blob);
+  const a = document.createElement('a');
+  a.href = blobUrl;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(blobUrl);
+}
+
 api.interceptors.response.use(
   (res) => res,
   async (err) => {

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams } from 'react-router-dom';
-import { api } from '../../api/client';
+import { api, downloadAttachment } from '../../api/client';
 
 interface Attachment {
   id: number;
@@ -120,13 +120,14 @@ function SubmissionRow({ row, onGrade, saving }: { row: RosterRow; onGrade: (gra
       {row.attachments.length > 0 && (
         <div className="flex flex-wrap gap-2 mt-2">
           {row.attachments.map((a) => (
-            <a
+            <button
               key={a.id}
-              href={`/api/attachments/submission/${a.id}/download`}
+              type="button"
+              onClick={() => downloadAttachment(`/attachments/submission/${a.id}/download`, a.file_name)}
               className="text-xs bg-slate-50 hover:bg-slate-100 rounded-lg px-2.5 py-1.5 text-slate-600 flex items-center gap-1.5"
             >
               📎 {a.file_name} <span className="text-slate-400">({formatBytes(a.size_bytes)})</span>
-            </a>
+            </button>
           ))}
         </div>
       )}
