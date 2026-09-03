@@ -64,11 +64,34 @@ export function AdminDashboardPage() {
     <div className="min-h-screen bg-slate-50">
       <TopBar title="Admin" />
       <main className="max-w-5xl mx-auto px-5 py-6 space-y-6">
+        <TestingModeBanner />
         <SyncSection />
         <ProvisionSection />
         <UsersSection />
         <AuditLogSection />
       </main>
+    </div>
+  );
+}
+
+function TestingModeBanner() {
+  const { data } = useQuery({
+    queryKey: ['setup-state'],
+    queryFn: async () => (await api.get<{ completed: boolean; testingMode: boolean }>('/setup/state')).data,
+  });
+  if (!data?.testingMode) return null;
+  return (
+    <div className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 flex items-center justify-between gap-4">
+      <div>
+        <p className="font-semibold text-amber-900">You're running on demo/testing data</p>
+        <p className="text-sm text-amber-700">
+          Everything works, but nothing here is real school data. Connect and map your actual
+          database when you're ready to go live.
+        </p>
+      </div>
+      <a href="/setup" className="rounded-xl bg-amber-600 text-white font-semibold px-4 py-2 text-sm shrink-0 hover:bg-amber-700">
+        Connect real database
+      </a>
     </div>
   );
 }

@@ -13,6 +13,7 @@ import {
 } from './connection-store';
 import { snapshotForMapping } from './introspect-snapshot';
 import { runInitialSync } from '../sync/sync-service';
+import { seedTestingMode } from './testing-mode';
 
 export const setupRouter = Router();
 
@@ -58,6 +59,28 @@ setupRouter.post('/bootstrap-admin', async (req, res) => {
     })
     .returning('id');
   res.status(201).json({ id: typeof id === 'object' ? id.id : id });
+});
+
+/**
+ * Skips the whole connect-a-real-database flow: seeds a self-contained demo
+ * dataset (see testing-mode.ts) and marks setup complete so the team can log
+ * in and try every role immediately. Safe to call again later to reset the
+ * demo — but refuses once a *real* database has been mapped and synced, so
+ * it can never be used to accidentally wipe real school data.
+ */
+setupRouter.post('/testing-mode', async (req, res) => {
+  const state = await portalDb()('hp_setup_state').first();
+  if (state?.completed && !state.testing_mode) {
+    res.status(409).json({ error: 'A real database is already connected — testing mode would wipe it. Not allowed.' });
+    return;
+  }
+  const admin = await portalDb()('hp_users').where({ role: 'SUPER_ADMIN' }).orderBy('id', 'asc').first();
+  if (!admin) {
+    res.status(400).json({ error: 'Create the admin account first.' });
+    return;
+  }
+  const result = await seedTestingMode(admin.id);
+  res.status(201).json(result);
 });
 
 const connectionSchema = z.object({
@@ -316,6 +339,7 @@ setupRouter.post('/complete', async (req, res) => {
     completed: true,
     completed_at: portalDb().fn.now(),
     active_mapping_version: parsed.data.mappingVersion,
+    testing_mode: false,
   });
 
   const syncResult = await runInitialSync();
@@ -323,5 +347,6 @@ setupRouter.post('/complete', async (req, res) => {
 });
 
 setupRouter.get('/state', async (_req, res) => {
-  res.json({ completed: await isSetupComplete() });
+  const state = await portalDb()('hp_setup_state').first();
+  res.json({ completed: Boolean(state?.completed), testingMode: Boolean(state?.testing_mode) });
 });

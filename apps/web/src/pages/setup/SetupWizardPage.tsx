@@ -72,6 +72,30 @@ export function SetupWizardPage() {
   const [adminLoginId, setAdminLoginId] = useState('');
   const [adminPassword, setAdminPassword] = useState('');
   const [adminMsg, setAdminMsg] = useState<string | null>(null);
+  const [testingModeAccounts, setTestingModeAccounts] = useState<{ loginId: string; password: string; role: string }[] | null>(null);
+  const [testingModeBusy, setTestingModeBusy] = useState(false);
+  const [testingModeError, setTestingModeError] = useState<string | null>(null);
+
+  async function startTestingMode() {
+    setTestingModeBusy(true);
+    setTestingModeError(null);
+    try {
+      try {
+        await api.post('/setup/bootstrap-admin', {
+          loginId: adminLoginId || 'admin',
+          password: adminPassword || 'AdminPass123',
+        });
+      } catch (err: any) {
+        if (err.response?.status !== 409) throw err;
+      }
+      const res = await api.post('/setup/testing-mode');
+      setTestingModeAccounts(res.data.accounts);
+    } catch (err: any) {
+      setTestingModeError(err.response?.data?.error ?? 'Could not set up testing mode.');
+    } finally {
+      setTestingModeBusy(false);
+    }
+  }
 
   // Step 1: connect
   const [engine, setEngine] = useState<Engine>('mssql');
@@ -229,6 +253,45 @@ export function SetupWizardPage() {
       </header>
 
       <div className="max-w-3xl mx-auto px-6 py-3">
+        {testingModeAccounts ? (
+          <div className="bg-white rounded-2xl shadow-card p-6 space-y-4">
+            <h2 className="font-bold text-slate-900 text-lg">Testing mode is ready 🎉</h2>
+            <p className="text-sm text-slate-500">
+              Demo branches, classes, teachers, students, and a few weeks of sample homework
+              history are seeded. Log in as any of these to try each role — passwords are shown
+              only here, so note them down now.
+            </p>
+            <div className="border border-slate-100 rounded-xl overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50 text-xs text-slate-400">
+                  <tr>
+                    <th className="text-left px-4 py-2">Role</th>
+                    <th className="text-left px-4 py-2">Login ID</th>
+                    <th className="text-left px-4 py-2">Password</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {testingModeAccounts.map((a) => (
+                    <tr key={a.loginId} className="border-t border-slate-50">
+                      <td className="px-4 py-2 text-slate-600">{a.role}</td>
+                      <td className="px-4 py-2 font-mono">{a.loginId}</td>
+                      <td className="px-4 py-2 font-mono">{a.password}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="flex items-center gap-3">
+              <a href="/login" className="rounded-xl bg-brand-indigo text-white font-semibold px-4 py-2.5 text-sm">
+                Go to login
+              </a>
+              <span className="text-xs text-slate-400">
+                Ready to go live? Log in as admin and use "Re-map source data" from the admin dashboard.
+              </span>
+            </div>
+          </div>
+        ) : (
+        <>
         <ol className="flex gap-2 text-xs mb-6">
           {STEP_LABELS.map((label, i) => (
             <li
@@ -279,6 +342,20 @@ export function SetupWizardPage() {
               >
                 Create admin & continue
               </button>
+
+              <div className="pt-3 border-t border-slate-100">
+                <p className="text-xs text-slate-400 mb-2">
+                  Don't have a database to connect yet? Skip straight to a working demo.
+                </p>
+                {testingModeError && <p className="text-xs text-rose-500 mb-2">{testingModeError}</p>}
+                <button
+                  onClick={startTestingMode}
+                  disabled={testingModeBusy}
+                  className="rounded-xl border border-brand-green text-brand-green-dark font-semibold px-4 py-2.5 text-sm disabled:opacity-50"
+                >
+                  {testingModeBusy ? 'Setting up demo data…' : 'Try it with demo data instead'}
+                </button>
+              </div>
             </div>
           )}
 
@@ -486,6 +563,8 @@ export function SetupWizardPage() {
             </div>
           )}
         </div>
+        </>
+        )}
       </div>
     </div>
   );
