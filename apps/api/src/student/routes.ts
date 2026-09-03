@@ -85,6 +85,50 @@ studentRouter.get('/subjects', async (req, res) => {
   res.json(rows);
 });
 
+/**
+ * Every published homework item assigned or due within one calendar month,
+ * for the calendar/history view — unpaginated (a month's volume for one
+ * class is never large) so the frontend can mark every day that has
+ * something without a second round trip per day.
+ */
+studentRouter.get('/homework/calendar', async (req, res) => {
+  const student = await loadCallerStudent(req);
+  const year = Number(req.query.year);
+  const month = Number(req.query.month); // 1-12
+  if (!year || !month || month < 1 || month > 12) {
+    res.status(400).json({ error: 'year and month (1-12) are required.' });
+    return;
+  }
+  const monthStart = `${year}-${String(month).padStart(2, '0')}-01`;
+  const monthEnd = new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10); // last day of month
+
+  const rows = await portalDb()('hp_homework as h')
+    .join('hp_homework_targets as tg', 'tg.homework_id', 'h.id')
+    .join('hp_teachers as t', 't.id', 'h.teacher_id')
+    .leftJoin('hp_subjects as s', 's.id', 'h.subject_id')
+    .leftJoin('hp_homework_submissions as sub', function () {
+      this.on('sub.homework_id', '=', 'h.id').andOn('sub.student_id', '=', portalDb().raw('?', [student.id]));
+    })
+    .select(
+      'h.id', 'h.title', 'h.assigned_date', 'h.due_date',
+      's.name as subject', 't.full_name as teacher',
+      portalDb().raw("coalesce(sub.status, 'pending') as submission_status")
+    )
+    .where('h.status', 'published')
+    .andWhere('tg.class_id', student.class_id)
+    .andWhere(function () {
+      this.whereNull('tg.section_id').orWhere('tg.section_id', student.section_id);
+    })
+    .andWhere(function () {
+      // A day is "relevant" on the calendar if it's when the homework was
+      // assigned OR when it's due — both dates can fall in different months.
+      this.whereBetween('h.assigned_date', [monthStart, monthEnd]).orWhereBetween('h.due_date', [monthStart, monthEnd]);
+    })
+    .orderBy('h.assigned_date', 'asc');
+
+  res.json(rows);
+});
+
 studentRouter.get('/homework/:id', async (req, res) => {
   const student = await loadCallerStudent(req);
   const homeworkId = Number(req.params.id);

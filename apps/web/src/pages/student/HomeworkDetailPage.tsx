@@ -2,7 +2,7 @@ import { useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../../api/client';
-import { subjectStyle } from './subjectStyle';
+import { subjectStyle } from '../../components/subjectStyle';
 
 interface Attachment {
   id: number;

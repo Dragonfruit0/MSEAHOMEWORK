@@ -9,6 +9,8 @@ import { RoleHome } from './pages/RoleHome';
 import { AdminDashboardPage } from './pages/admin/AdminDashboardPage';
 import { TeacherSubmissionsPage } from './pages/teacher/TeacherSubmissionsPage';
 import { SetupWizardPage } from './pages/setup/SetupWizardPage';
+import { CalendarPage } from './pages/CalendarPage';
+import { ProfilePage } from './pages/ProfilePage';
 
 const queryClient = new QueryClient();
 
@@ -52,6 +54,22 @@ export function App() {
               element={
                 <ProtectedRoute roles={['TEACHER']}>
                   <TeacherSubmissionsPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/calendar"
+              element={
+                <ProtectedRoute roles={['STUDENT', 'TEACHER']}>
+                  <CalendarPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/profile"
+              element={
+                <ProtectedRoute roles={['STUDENT', 'TEACHER']}>
+                  <ProfilePage />
                 </ProtectedRoute>
               }
             />

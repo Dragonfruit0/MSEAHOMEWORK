@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 import { api } from '../../api/client';
 import { BottomNav } from '../../components/BottomNav';
 import { Logo } from '../../components/Logo';
-import { subjectStyle } from './subjectStyle';
+import { subjectStyle } from '../../components/subjectStyle';
 
 interface HomeworkItem {
   id: number;

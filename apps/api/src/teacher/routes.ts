@@ -193,12 +193,38 @@ teacherRouter.get('/homework', async (req, res) => {
   const [{ count }] = (await portalDb()('hp_homework').where({ teacher_id: tId }).count<{ count: string }[]>('id as count')) as [
     { count: string },
   ];
-  const rows = await portalDb()('hp_homework')
-    .where({ teacher_id: tId })
-    .orderBy('assigned_date', 'desc')
+  const rows = await portalDb()('hp_homework as h')
+    .leftJoin('hp_subjects as s', 's.id', 'h.subject_id')
+    .select('h.*', 's.name as subject')
+    .where('h.teacher_id', tId)
+    .orderBy('h.assigned_date', 'desc')
     .limit(TEACHER_HOMEWORK_PAGE_SIZE)
     .offset((page - 1) * TEACHER_HOMEWORK_PAGE_SIZE);
   res.json({ rows, total: Number(count), page, pageSize: TEACHER_HOMEWORK_PAGE_SIZE });
+});
+
+/** Every homework this teacher posted, assigned or due within one calendar month — the calendar/history view. */
+teacherRouter.get('/homework/calendar', async (req, res) => {
+  const tId = await teacherId(req);
+  const year = Number(req.query.year);
+  const month = Number(req.query.month);
+  if (!year || !month || month < 1 || month > 12) {
+    res.status(400).json({ error: 'year and month (1-12) are required.' });
+    return;
+  }
+  const monthStart = `${year}-${String(month).padStart(2, '0')}-01`;
+  const monthEnd = new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10);
+
+  const rows = await portalDb()('hp_homework as h')
+    .leftJoin('hp_subjects as s', 's.id', 'h.subject_id')
+    .select('h.id', 'h.title', 'h.status', 'h.assigned_date', 'h.due_date', 's.name as subject')
+    .where('h.teacher_id', tId)
+    .andWhere(function () {
+      this.whereBetween('h.assigned_date', [monthStart, monthEnd]).orWhereBetween('h.due_date', [monthStart, monthEnd]);
+    })
+    .orderBy('h.assigned_date', 'asc');
+
+  res.json(rows);
 });
 
 teacherRouter.get('/homework/:id', async (req, res) => {

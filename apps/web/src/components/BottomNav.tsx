@@ -2,7 +2,7 @@ import { NavLink } from 'react-router-dom';
 
 const items = [
   { to: '/', label: 'Home', icon: HomeIcon },
-  { to: '/homework', label: 'Homework', icon: BookIcon },
+  { to: '/calendar', label: 'Calendar', icon: CalendarIcon },
   { to: '/profile', label: 'Profile', icon: UserIcon },
 ];
 
@@ -49,11 +49,11 @@ function HomeIcon() {
     </svg>
   );
 }
-function BookIcon() {
+function CalendarIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M4 5.5A2.5 2.5 0 016.5 3H20v15H6.5A2.5 2.5 0 004 15.5v-10z" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M4 15.5A2.5 2.5 0 016.5 13H20" strokeLinecap="round" strokeLinejoin="round" />
+      <rect x="3.5" y="5" width="17" height="16" rx="2" />
+      <path d="M8 3v4M16 3v4M3.5 10h17" strokeLinecap="round" />
     </svg>
   );
 }

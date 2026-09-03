@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '../../api/client';
-import { TopBar } from '../../components/TopBar';
 
 interface Attachment {
   id: number;
@@ -67,8 +66,7 @@ export function TeacherSubmissionsPage() {
   const total = roster?.length ?? 0;
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <TopBar title="Teacher" />
+    <div className="min-h-screen bg-slate-50 pb-10">
       <main className="max-w-3xl mx-auto px-5 py-6">
         <button onClick={() => navigate(-1)} className="text-sm text-slate-500 font-medium mb-3">
           ← Back

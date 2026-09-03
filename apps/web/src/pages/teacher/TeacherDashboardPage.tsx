@@ -2,7 +2,10 @@ import { useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { api } from '../../api/client';
-import { TopBar } from '../../components/TopBar';
+import { Logo } from '../../components/Logo';
+import { BottomNav } from '../../components/BottomNav';
+import { subjectStyle } from '../../components/subjectStyle';
+import { useAuth } from '../../auth/AuthContext';
 
 interface MyClass {
   assignmentId: number;
@@ -18,19 +21,21 @@ interface HomeworkRow {
   id: number;
   title: string;
   description: string | null;
+  subject: string | null;
   status: 'draft' | 'published' | 'archived';
   assigned_date: string;
   due_date: string | null;
 }
 
 export function TeacherDashboardPage() {
+  const { user } = useAuth();
   const queryClient = useQueryClient();
+  const [composerOpen, setComposerOpen] = useState(false);
   const [selectedClasses, setSelectedClasses] = useState<Set<number>>(new Set());
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [dueDate, setDueDate] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [createdHomeworkId, setCreatedHomeworkId] = useState<number | null>(null);
   const [attachmentCount, setAttachmentCount] = useState(0);
   const [page, setPage] = useState(1);
 
@@ -62,7 +67,6 @@ export function TeacherDashboardPage() {
       return res.data.id as number;
     },
     onSuccess: async (id) => {
-      setCreatedHomeworkId(id);
       const files = Array.from(fileInputRef.current?.files ?? []).slice(0, 5);
       // Uploaded sequentially, not in parallel: each call is its own request
       // against the same homework row, and the backend has no batch
@@ -82,18 +86,38 @@ export function TeacherDashboardPage() {
       setSelectedClasses(new Set());
       setAttachmentCount(0);
       if (fileInputRef.current) fileInputRef.current.value = '';
+      setComposerOpen(false);
       queryClient.invalidateQueries({ queryKey: ['teacher-homework'] });
     },
   });
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <TopBar title="Teacher" />
-      <main className="max-w-5xl mx-auto px-5 py-6 grid gap-6 md:grid-cols-[1fr,1.2fr]">
-        <section className="bg-white rounded-2xl shadow-card p-5">
-          <h2 className="font-bold text-slate-900 mb-4">Post new homework</h2>
+    <div className="min-h-screen pb-24 sm:pb-10">
+      <header className="bg-white sticky top-0 z-10 border-b border-slate-100">
+        <div className="max-w-lg mx-auto px-5 pt-5 pb-3 flex items-center justify-between">
+          <Logo className="h-7" />
+          <span className="h-9 w-9 rounded-full bg-brand-indigo/10 flex items-center justify-center text-sm font-bold text-brand-indigo">
+            {user?.loginId?.[0]?.toUpperCase()}
+          </span>
+        </div>
+        <div className="max-w-lg mx-auto px-5 pb-4 flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-extrabold text-slate-900">My Homework</h1>
+            <p className="text-sm text-slate-400">What you've posted to your classes</p>
+          </div>
+          <button
+            onClick={() => setComposerOpen((v) => !v)}
+            className="shrink-0 rounded-xl bg-brand-indigo text-white font-semibold text-sm px-4 py-2.5 hover:bg-brand-indigo-dark transition-colors"
+          >
+            {composerOpen ? 'Close' : '+ Post'}
+          </button>
+        </div>
+      </header>
 
-          <div className="space-y-3">
+      <main className="max-w-lg mx-auto px-5 pt-4 space-y-4">
+        {composerOpen && (
+          <section className="bg-white rounded-2xl shadow-card p-5 space-y-3">
+            <h2 className="font-bold text-slate-900">Post new homework</h2>
             <input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
@@ -160,19 +184,20 @@ export function TeacherDashboardPage() {
             >
               {createMutation.isPending ? 'Publishing…' : 'Publish homework'}
             </button>
-            {createdHomeworkId && (
-              <p className="text-xs text-brand-green text-center">Published successfully ✓</p>
-            )}
-          </div>
-        </section>
+          </section>
+        )}
 
-        <section className="bg-white rounded-2xl shadow-card p-5">
-          <h2 className="font-bold text-slate-900 mb-4">Your homework</h2>
-          <div className="space-y-2">
+        <section>
+          <div className="space-y-3">
             {(homeworkList ?? []).map((hw) => (
-              <HomeworkListRow key={hw.id} hw={hw} />
+              <HomeworkCard key={hw.id} hw={hw} />
             ))}
-            {homeworkList?.length === 0 && <p className="text-sm text-slate-400">Nothing posted yet.</p>}
+            {homeworkList?.length === 0 && (
+              <div className="text-center py-16">
+                <p className="text-4xl mb-2">📭</p>
+                <p className="text-slate-500 text-sm">Nothing posted yet — tap "+ Post" to get started.</p>
+              </div>
+            )}
           </div>
           {homeworkData && homeworkData.total > homeworkData.pageSize && (
             <div className="flex items-center justify-center gap-3 mt-4 text-sm">
@@ -189,16 +214,25 @@ export function TeacherDashboardPage() {
           )}
         </section>
       </main>
+
+      <BottomNav />
     </div>
   );
 }
 
-function HomeworkListRow({ hw }: { hw: HomeworkRow }) {
+const STATUS_PILL: Record<HomeworkRow['status'], string> = {
+  published: 'bg-brand-green text-white',
+  draft: 'bg-slate-200 text-slate-600',
+  archived: 'bg-slate-200 text-slate-600',
+};
+
+function HomeworkCard({ hw }: { hw: HomeworkRow }) {
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(hw.title);
   const [description, setDescription] = useState(hw.description ?? '');
   const [dueDate, setDueDate] = useState(hw.due_date ? hw.due_date.slice(0, 10) : '');
+  const style = subjectStyle(hw.subject);
 
   function invalidate() {
     queryClient.invalidateQueries({ queryKey: ['teacher-homework'] });
@@ -222,7 +256,7 @@ function HomeworkListRow({ hw }: { hw: HomeworkRow }) {
 
   if (editing) {
     return (
-      <div className="rounded-xl border border-brand-indigo/30 bg-brand-indigo/5 px-4 py-3 space-y-2">
+      <div className="rounded-2xl border border-brand-indigo/30 bg-white p-4 space-y-2">
         <input
           value={title}
           onChange={(e) => setTitle(e.target.value)}
@@ -257,23 +291,22 @@ function HomeworkListRow({ hw }: { hw: HomeworkRow }) {
   }
 
   return (
-    <div className="flex items-center justify-between rounded-xl border border-slate-100 px-4 py-3">
-      <div>
-        <p className="text-sm font-semibold text-slate-800">{hw.title}</p>
-        <p className="text-xs text-slate-400">
-          Assigned {new Date(hw.assigned_date).toLocaleDateString()}
-          {hw.due_date && ` · Due ${new Date(hw.due_date).toLocaleDateString()}`}
-        </p>
-      </div>
-      <div className="flex items-center gap-2 shrink-0">
-        <span
-          className={`text-xs font-semibold px-2.5 py-1 rounded-full ${
-            hw.status === 'published' ? 'bg-brand-green/10 text-brand-green-dark' : 'bg-slate-100 text-slate-500'
-          }`}
-        >
-          {hw.status}
+    <div className={`rounded-2xl p-4 ${style.bg}`}>
+      <div className="flex items-center gap-3">
+        <span className={`h-11 w-11 shrink-0 rounded-full flex items-center justify-center text-lg ${style.icon}`}>
+          {style.emoji}
         </span>
-        <button onClick={() => setEditing(true)} className="text-xs font-semibold text-slate-500 hover:underline">
+        <div className="flex-1 min-w-0">
+          <p className="font-semibold text-slate-900 truncate">{hw.title}</p>
+          <p className="text-xs text-slate-500 mt-0.5">
+            {hw.subject ?? 'General'} · Assigned {new Date(hw.assigned_date).toLocaleDateString()}
+            {hw.due_date && ` · Due ${new Date(hw.due_date).toLocaleDateString()}`}
+          </p>
+        </div>
+        <span className={`shrink-0 text-xs font-semibold px-2.5 py-1 rounded-full ${STATUS_PILL[hw.status]}`}>{hw.status}</span>
+      </div>
+      <div className="flex items-center gap-3 mt-3 pt-3 border-t border-black/5">
+        <button onClick={() => setEditing(true)} className="text-xs font-semibold text-slate-600 hover:underline">
           Edit
         </button>
         {hw.status === 'published' ? (
@@ -284,7 +317,7 @@ function HomeworkListRow({ hw }: { hw: HomeworkRow }) {
             <button
               onClick={() => unpublishMutation.mutate()}
               disabled={unpublishMutation.isPending}
-              className="text-xs font-semibold text-rose-500 hover:underline"
+              className="text-xs font-semibold text-rose-500 hover:underline ml-auto"
             >
               Unpublish
             </button>
@@ -293,7 +326,7 @@ function HomeworkListRow({ hw }: { hw: HomeworkRow }) {
           <button
             onClick={() => republishMutation.mutate()}
             disabled={republishMutation.isPending}
-            className="text-xs font-semibold text-brand-green-dark hover:underline"
+            className="text-xs font-semibold text-brand-green-dark hover:underline ml-auto"
           >
             Publish
           </button>

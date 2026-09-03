@@ -1,4 +1,17 @@
 import knex, { Knex } from 'knex';
+import pg from 'pg';
+
+// node-postgres deserializes a plain SQL DATE column (no time-of-day) into a
+// JS Date at LOCAL midnight, which then serializes to JSON via toISOString()
+// as a UTC instant — shifting the calendar date backward by a day for any
+// server not running in UTC (e.g. IST: Aug 27 local midnight becomes
+// "2026-08-26T18:30:00.000Z"). hp_homework.assigned_date/due_date are exactly
+// this type, and are read back naively as text (.slice(0, 10)) in more than
+// one place (the calendar view keys marked days off this). Returning the
+// raw "YYYY-MM-DD" string instead of a Date object removes the ambiguity
+// at the source rather than compensating for it at every call site.
+// OID 1082 = date.
+pg.types.setTypeParser(1082, (val) => val);
 
 /**
  * The PORTAL plane connection: our own hp_* tables. Unlike the source-school
