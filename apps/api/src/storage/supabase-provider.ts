@@ -57,7 +57,11 @@ export class SupabaseStorageProvider implements StorageProvider {
     const res = await fetch(`${this.baseUrl}/object/${this.config.bucket}/${key}`, {
       method: 'POST',
       headers: this.headers({ 'Content-Type': mimeType, 'x-upsert': 'true' }),
-      body: data,
+      // fetch's BodyInit type (from the DOM lib) doesn't include Node's
+      // Buffer in every @types/node/lib.dom combination — seen only in
+      // Vercel's isolated function build, not this repo's own tsc. A plain
+      // Uint8Array view is unambiguous everywhere Buffer already *is* one.
+      body: new Uint8Array(data),
     });
     if (!res.ok) {
       throw new Error(`Supabase Storage upload failed for "${key}": ${res.status} ${await res.text()}`);
