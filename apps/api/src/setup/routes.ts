@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { createAdapter, ENGINE_DEFAULT_PORT, type Engine } from '@homework-portal/db-adapters';
+import { createAdapter, ENGINE_DEFAULT_PORT, type ConnectionConfig, type Engine } from '@homework-portal/db-adapters';
 import { buildEntitySelect, validateMappingStructure } from '@homework-portal/mapping';
 import { REQUIRED_FIELDS, type EntityMappingDocument, type LogicalEntityName } from '@homework-portal/shared';
 import { portalDb } from '../db/portal-connection';
@@ -97,6 +97,33 @@ const connectionSchema = z.object({
   connectString: z.string().optional(),
 });
 
+type ConnectionInput = z.infer<typeof connectionSchema>;
+
+/**
+ * Field-by-field rather than a `{ ...data }` spread: a spread of the zod
+ * output type has been observed to type-check differently across
+ * environments (this codebase's own tsc passes it cleanly; Vercel's
+ * function build — which resolves apps/api's source outside of any of this
+ * repo's own tsconfig "include" scope — does not). Assigning every field
+ * explicitly can't be ambiguous regardless of which tsconfig ends up
+ * governing the check.
+ */
+function toConnectionConfig(data: ConnectionInput): ConnectionConfig {
+  return {
+    engine: data.engine,
+    host: data.host,
+    port: data.port ?? ENGINE_DEFAULT_PORT[data.engine as Engine],
+    database: data.database,
+    schema: data.schema,
+    user: data.user,
+    password: data.password,
+    ssl: data.ssl,
+    trustServerCertificate: data.trustServerCertificate,
+    readOnlyIntent: data.readOnlyIntent,
+    connectString: data.connectString,
+  };
+}
+
 /** Step 1: test a connection WITHOUT persisting it, so a typo doesn't get saved. */
 setupRouter.post('/test-connection', async (req, res) => {
   const parsed = connectionSchema.safeParse(req.body);
@@ -104,7 +131,7 @@ setupRouter.post('/test-connection', async (req, res) => {
     res.status(400).json({ error: parsed.error.flatten() });
     return;
   }
-  const cfg = { ...parsed.data, port: parsed.data.port ?? ENGINE_DEFAULT_PORT[parsed.data.engine as Engine] };
+  const cfg = toConnectionConfig(parsed.data);
   const adapter = await createAdapter(cfg);
   try {
     const result = await adapter.testConnection();
@@ -122,8 +149,8 @@ setupRouter.post('/connections', async (req, res) => {
     res.status(400).json({ error: parsed.error.flatten() });
     return;
   }
-  const { role, ...cfg } = parsed.data;
-  const id = await saveDraftConnection(role, cfg);
+  const cfg = toConnectionConfig(parsed.data);
+  const id = await saveDraftConnection(parsed.data.role, cfg);
   res.status(201).json({ id });
 });
 
