@@ -1,7 +1,8 @@
 import { useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { api, downloadAttachment } from '../../api/client';
+import { api } from '../../api/client';
+import { AttachmentPreview } from '../../components/AttachmentPreview';
 import { subjectStyle } from '../../components/subjectStyle';
 
 interface Attachment {
@@ -22,12 +23,6 @@ interface HomeworkDetail {
   allow_submission: boolean;
   attachments: Attachment[];
   submission: { status: string; note: string | null; grade: number | null; feedback: string | null } | null;
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 export function HomeworkDetailPage() {
@@ -111,20 +106,7 @@ export function HomeworkDetailPage() {
             <h3 className="text-sm font-bold text-slate-800 mb-3">Attachments</h3>
             <div className="space-y-2">
               {data.attachments.map((a) => (
-                <button
-                  key={a.id}
-                  type="button"
-                  onClick={() => downloadAttachment(`/attachments/${a.id}/download`, a.file_name)}
-                  className="w-full flex items-center gap-3 rounded-xl border border-slate-100 px-3 py-2.5 hover:bg-slate-50 transition text-left"
-                >
-                  <span className="h-8 w-8 rounded-lg bg-brand-indigo/10 text-brand-indigo flex items-center justify-center text-xs font-bold">
-                    {a.file_name.split('.').pop()?.toUpperCase().slice(0, 3)}
-                  </span>
-                  <span className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-slate-800 truncate">{a.file_name}</p>
-                    <p className="text-xs text-slate-400">{formatBytes(a.size_bytes)}</p>
-                  </span>
-                </button>
+                <AttachmentPreview key={a.id} attachment={a} kind="homework" />
               ))}
             </div>
           </div>

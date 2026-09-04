@@ -77,7 +77,7 @@ export class SupabaseStorageProvider implements StorageProvider {
     return { storedPath: key };
   }
 
-  async read(storedPath: string): Promise<{ redirectUrl: string }> {
+  async read(storedPath: string, expiresInSeconds = 300): Promise<{ redirectUrl: string }> {
     // Signed URL rather than a public one — attachments are private by
     // default (the bucket itself is created non-public) and every download
     // already goes through our own authorization check before this is ever
@@ -85,7 +85,7 @@ export class SupabaseStorageProvider implements StorageProvider {
     const res = await fetch(`${this.baseUrl}/object/sign/${this.config.bucket}/${storedPath}`, {
       method: 'POST',
       headers: this.headers({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ expiresIn: 300 }),
+      body: JSON.stringify({ expiresIn: expiresInSeconds }),
     });
     if (!res.ok) {
       throw new Error(`Supabase Storage sign failed for "${storedPath}": ${res.status} ${await res.text()}`);

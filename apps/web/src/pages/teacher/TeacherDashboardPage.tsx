@@ -1,6 +1,7 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
+import { prefetchAttachmentPreview } from '../../api/attachmentPreview';
 import { api } from '../../api/client';
 import { Logo } from '../../components/Logo';
 import { BottomNav } from '../../components/BottomNav';
@@ -50,6 +51,26 @@ export function TeacherDashboardPage() {
   });
   const homeworkList = homeworkData?.rows;
   const totalPages = homeworkData ? Math.max(1, Math.ceil(homeworkData.total / homeworkData.pageSize)) : 1;
+
+  // Warm the submission-attachment preview cache as soon as the dashboard
+  // loads (right after sign-in) so opening "Submissions" on a published
+  // homework shows student files instantly instead of loading them then.
+  useEffect(() => {
+    if (!homeworkList) return;
+    for (const hw of homeworkList) {
+      if (hw.status !== 'published') continue;
+      queryClient
+        .fetchQuery({
+          queryKey: ['teacher-submissions', String(hw.id)],
+          queryFn: async () => (await api.get<{ attachments: { id: number }[] }[]>(`/teacher/homework/${hw.id}/submissions`)).data,
+          staleTime: 60_000,
+        })
+        .then((roster) => {
+          for (const row of roster) for (const a of row.attachments) prefetchAttachmentPreview('submission', a.id);
+        })
+        .catch(() => {});
+    }
+  }, [homeworkList, queryClient]);
 
   const createMutation = useMutation({
     mutationFn: async () => {

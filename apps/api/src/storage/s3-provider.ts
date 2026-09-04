@@ -30,10 +30,10 @@ export class S3StorageProvider implements StorageProvider {
     return { storedPath: key };
   }
 
-  async read(storedPath: string): Promise<{ redirectUrl: string }> {
+  async read(storedPath: string, expiresInSeconds = 300): Promise<{ redirectUrl: string }> {
     const command = new GetObjectCommand({ Bucket: this.config.bucket, Key: storedPath });
-    // 5-minute presigned URL — attachment paths themselves are never exposed to clients.
-    const redirectUrl = await getSignedUrl(this.client, command, { expiresIn: 300 });
+    // Attachment paths themselves are never exposed to clients — only this signed URL.
+    const redirectUrl = await getSignedUrl(this.client, command, { expiresIn: expiresInSeconds });
     return { redirectUrl };
   }
 

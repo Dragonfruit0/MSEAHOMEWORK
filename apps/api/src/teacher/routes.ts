@@ -272,7 +272,7 @@ teacherRouter.get('/homework/:id/submissions', async (req, res) => {
   const submissionIds = roster.filter((r) => r.submissionId).map((r) => r.submissionId);
   const attachments = submissionIds.length
     ? await portalDb()('hp_submission_attachments')
-        .select('id', 'submission_id', 'file_name', 'size_bytes')
+        .select('id', 'submission_id', 'file_name', 'mime_type', 'size_bytes')
         .whereIn('submission_id', submissionIds)
     : [];
   const attachmentsBySubmission = new Map<number, typeof attachments>();

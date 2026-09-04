@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
+import { prefetchAttachmentPreview } from '../../api/attachmentPreview';
 import { api } from '../../api/client';
 import { BottomNav } from '../../components/BottomNav';
 import { Logo } from '../../components/Logo';
@@ -40,7 +41,12 @@ function formatDateHeading(dateStr: string): string {
   return d.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric' });
 }
 
+interface HomeworkDetailForPrefetch {
+  attachments: { id: number }[];
+}
+
 export function HomeworkFeedPage() {
+  const queryClient = useQueryClient();
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending'>('pending');
   const [search, setSearch] = useState('');
   const [subjectFilter, setSubjectFilter] = useState(''); // '' = All
@@ -69,6 +75,26 @@ export function HomeworkFeedPage() {
       return res.data;
     },
   });
+
+  // Warm the attachment-preview cache the moment the feed loads (i.e. right
+  // after sign-in), rather than waiting until the student taps into a
+  // specific homework — by the time they open one, its files are already
+  // fetched and ready to render instead of loading from scratch.
+  useEffect(() => {
+    if (!data) return;
+    for (const hw of data.rows) {
+      queryClient
+        .fetchQuery({
+          queryKey: ['homework-detail', String(hw.id)],
+          queryFn: async () => (await api.get<HomeworkDetailForPrefetch>(`/student/homework/${hw.id}`)).data,
+          staleTime: 60_000,
+        })
+        .then((detail) => {
+          for (const a of detail.attachments) prefetchAttachmentPreview('homework', a.id);
+        })
+        .catch(() => {});
+    }
+  }, [data, queryClient]);
 
   const grouped = useMemo(() => {
     const map = new Map<string, HomeworkItem[]>();

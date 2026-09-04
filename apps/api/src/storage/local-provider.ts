@@ -14,7 +14,7 @@ export class LocalStorageProvider implements StorageProvider {
     return { storedPath: key };
   }
 
-  async read(storedPath: string): Promise<{ stream?: NodeJS.ReadableStream }> {
+  async read(storedPath: string, _expiresInSeconds?: number): Promise<{ stream?: NodeJS.ReadableStream }> {
     const fullPath = this.resolveSafe(storedPath);
     return { stream: fs.createReadStream(fullPath) };
   }

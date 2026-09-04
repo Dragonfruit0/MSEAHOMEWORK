@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams } from 'react-router-dom';
-import { api, downloadAttachment } from '../../api/client';
+import { api } from '../../api/client';
+import { AttachmentPreview } from '../../components/AttachmentPreview';
 
 interface Attachment {
   id: number;
   file_name: string;
+  mime_type: string;
   size_bytes: number;
 }
 
@@ -28,11 +30,6 @@ interface HomeworkInfo {
   due_date: string | null;
 }
 
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
 
 const STATUS_STYLE: Record<string, string> = {
   pending: 'bg-slate-100 text-slate-500',
@@ -118,16 +115,9 @@ function SubmissionRow({ row, onGrade, saving }: { row: RosterRow; onGrade: (gra
       {row.note && <p className="text-sm text-slate-600 mt-2 italic">"{row.note}"</p>}
 
       {row.attachments.length > 0 && (
-        <div className="flex flex-wrap gap-2 mt-2">
+        <div className="space-y-2 mt-2">
           {row.attachments.map((a) => (
-            <button
-              key={a.id}
-              type="button"
-              onClick={() => downloadAttachment(`/attachments/submission/${a.id}/download`, a.file_name)}
-              className="text-xs bg-slate-50 hover:bg-slate-100 rounded-lg px-2.5 py-1.5 text-slate-600 flex items-center gap-1.5"
-            >
-              📎 {a.file_name} <span className="text-slate-400">({formatBytes(a.size_bytes)})</span>
-            </button>
+            <AttachmentPreview key={a.id} attachment={a} kind="submission" />
           ))}
         </div>
       )}
